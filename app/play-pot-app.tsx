@@ -49,13 +49,6 @@ type Notice = {
   undo?: UndoAction;
 };
 
-const PRESETS = [
-  { adults: 1, children: 1 },
-  { adults: 1, children: 2 },
-  { adults: 2, children: 1 },
-  { adults: 2, children: 2 },
-];
-
 const sgTime = new Intl.DateTimeFormat("en-SG", {
   hour: "numeric",
   minute: "2-digit",
@@ -119,10 +112,12 @@ function Stepper({
   label,
   value,
   onChange,
+  max = 15,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  max?: number;
 }) {
   return (
     <div className="stepper" aria-label={`${label}: ${value}`}>
@@ -138,7 +133,8 @@ function Stepper({
       <button
         type="button"
         aria-label={`Add one ${label.toLowerCase()}`}
-        onClick={() => onChange(Math.min(15, value + 1))}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
       >
         +
       </button>
@@ -266,12 +262,9 @@ export default function PlayPotApp() {
   const [state, setState] = useState<PlayPotState | null>(null);
   const [loadError, setLoadError] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [selection, setSelection] = useState<{ adults: number; children: number } | null>(null);
   const [customAdults, setCustomAdults] = useState(1);
   const [customChildren, setCustomChildren] = useState(1);
   const [visual, setVisual] = useState("");
-  const [ageStatus, setAgeStatus] = useState<AgeStatus>("unchecked");
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const mutationLock = useRef(false);
@@ -289,7 +282,7 @@ export default function PlayPotApp() {
   }
 
   useEffect(() => {
-    void loadState();
+    const initialLoad = window.setTimeout(() => void loadState(), 0);
     const tick = window.setInterval(() => setNow(Date.now()), 1_000);
     const refreshOnReturn = () => {
       setNow(Date.now());
@@ -297,6 +290,7 @@ export default function PlayPotApp() {
     };
     document.addEventListener("visibilitychange", refreshOnReturn);
     return () => {
+      window.clearTimeout(initialLoad);
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
     };
@@ -347,24 +341,21 @@ export default function PlayPotApp() {
   }
 
   async function handleAdd() {
-    if (!state || !selection || ageStatus === "4plus") return;
-    const pax = selection.adults + selection.children;
+    if (!state) return;
+    const pax = customAdults + customChildren;
     const mustQueue =
       state.waiting.length > 0 || state.spacesLeft < pax || state.currentPax > state.capacity;
     const placement = mustQueue ? "waiting" : "inside";
-    const operationId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`;
+    const operationId = crypto.randomUUID();
 
     await runMutation("add", async () => {
       const result = await postAction({
         type: "add",
         operationId,
-        adults: selection.adults,
-        children: selection.children,
+        adults: customAdults,
+        children: customChildren,
         visual,
-        ageStatus,
+        ageStatus: "unchecked",
         placement,
       });
       setState(result.state);
@@ -376,10 +367,9 @@ export default function PlayPotApp() {
             ? `${id} entered · ${pax} pax · 15-min timer started`
             : `${id} added to waiting · ${pax} pax`,
       });
-      setSelection(null);
+      setCustomAdults(1);
+      setCustomChildren(1);
       setVisual("");
-      setAgeStatus("unchecked");
-      setComposerOpen(false);
       vibrate();
     });
   }
@@ -489,13 +479,11 @@ export default function PlayPotApp() {
     );
   }
 
-  const selectedPax = selection ? selection.adults + selection.children : 0;
-  const willQueue = Boolean(
-    selection &&
-      (state.waiting.length > 0 ||
-        selectedPax > state.spacesLeft ||
-        state.currentPax > state.capacity),
-  );
+  const selectedPax = customAdults + customChildren;
+  const willQueue =
+    state.waiting.length > 0 ||
+    selectedPax > state.spacesLeft ||
+    state.currentPax > state.capacity;
   const isOverCapacity = state.currentPax > state.capacity;
 
   return (
@@ -559,151 +547,73 @@ export default function PlayPotApp() {
         ) : null}
 
         <section className="admission-section" aria-labelledby="admission-title">
-          <button
-            type="button"
-            className="open-composer-button"
-            onClick={() => setComposerOpen((open) => !open)}
-            aria-expanded={composerOpen}
-            aria-controls="admission-composer"
-          >
-            <span>{composerOpen ? "×" : "+"}</span>
-            {composerOpen ? "CLOSE ADMISSION" : "ENTER FAMILY"}
-          </button>
-
-          {composerOpen ? (
-            <div id="admission-composer" className="admission-composer">
-              <div className="section-heading">
-                <h2 id="admission-title">Family count</h2>
-                <span className="policy-reminder">CHECK PASS · 15 PAX MAX</span>
-              </div>
-
-              <div className="preset-grid">
-                {PRESETS.map((preset) => {
-                  const selected =
-                    selection?.adults === preset.adults &&
-                    selection?.children === preset.children;
-                  return (
-                    <button
-                      type="button"
-                      key={`${preset.adults}-${preset.children}`}
-                      className={selected ? "preset-selected" : ""}
-                      onClick={() => setSelection(preset)}
-                    >
-                      <strong>
-                        {preset.adults}A {preset.children}C
-                      </strong>
-                      <span>{preset.adults + preset.children} PAX</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <details className="custom-count">
-                <summary>CUSTOM COUNT / AGE</summary>
-                <div className="custom-body">
-                  <Stepper label="Adults" value={customAdults} onChange={setCustomAdults} />
-                  <Stepper label="Children" value={customChildren} onChange={setCustomChildren} />
-                  <button
-                    type="button"
-                    className="use-custom"
-                    disabled={customAdults + customChildren > 15}
-                    onClick={() =>
-                      setSelection({ adults: customAdults, children: customChildren })
-                    }
-                  >
-                    USE {customAdults + customChildren} PAX
-                  </button>
-                  <fieldset className="age-check">
-                    <legend>Age check · optional</legend>
-                    <div>
-                      <button
-                        type="button"
-                        className={ageStatus === "unchecked" ? "age-selected" : ""}
-                        onClick={() => setAgeStatus("unchecked")}
-                      >
-                        NOT RECORDED
-                      </button>
-                      <button
-                        type="button"
-                        className={ageStatus === "under4" ? "age-selected age-ok" : ""}
-                        onClick={() => setAgeStatus("under4")}
-                      >
-                        UNDER 4 ✓
-                      </button>
-                      <button
-                        type="button"
-                        className={ageStatus === "4plus" ? "age-selected age-stop" : ""}
-                        onClick={() => setAgeStatus("4plus")}
-                      >
-                        4+ CHECK
-                      </button>
-                    </div>
-                  </fieldset>
-                </div>
-              </details>
-
-              <div className="quick-details">
-                <label className="field-label" htmlFor="visual-input">
-                  Visual <span>optional · 2–4 words</span>
-                </label>
-                <input
-                  id="visual-input"
-                  className="text-input visual-input"
-                  value={visual}
-                  maxLength={60}
-                  onChange={(event) => setVisual(event.target.value)}
-                  placeholder="e.g. yellow tee kid"
-                  autoComplete="off"
-                />
-
-              </div>
-
-              {ageStatus === "4plus" ? (
-                <div className="eligibility-stop" role="alert">
-                  MARKED 4+ · CHECK WITH STAFF BEFORE ADMISSION
-                </div>
-              ) : selection ? (
-                <div className={`admission-result ${willQueue ? "result-queue" : "result-fit"}`}>
-                  {willQueue ? (
-                    <>
-                      <strong>ADD TO WAITING</strong>
-                      <span>
-                        {state.waiting.length
-                          ? "Queue already active · keep FIFO order"
-                          : `Needs ${selectedPax} · only ${Math.max(0, state.spacesLeft)} spaces left`}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <strong>{selectedPax} PAX FITS</strong>
-                      <span>{state.spacesLeft - selectedPax} spaces remain after entry</span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="admission-result result-empty">
-                  TAP A COUNT ABOVE
-                </div>
-              )}
-
-              <button
-                type="button"
-                className={`commit-family-button ${willQueue ? "commit-queue" : ""}`}
-                disabled={!selection || ageStatus === "4plus" || Boolean(pending)}
-                onClick={() => void handleAdd()}
-              >
-                {pending === "add"
-                  ? "SAVING…"
-                  : ageStatus === "4plus"
-                    ? "STOP · CHECK AGE"
-                    : !selection
-                      ? "SELECT FAMILY COUNT"
-                      : willQueue
-                        ? `ADD ${selectedPax} PAX TO WAITING`
-                        : `ENTER FAMILY · ${selectedPax} PAX`}
-              </button>
+          <div className="admission-composer">
+            <div className="section-heading">
+              <h2 id="admission-title">New family</h2>
+              <span className="policy-reminder">CHECK PASS · 15 PAX MAX</span>
             </div>
-          ) : null}
+
+            <div className="front-counts">
+              <Stepper
+                label="Adults"
+                value={customAdults}
+                max={15 - customChildren}
+                onChange={setCustomAdults}
+              />
+              <Stepper
+                label="Children"
+                value={customChildren}
+                max={15 - customAdults}
+                onChange={setCustomChildren}
+              />
+            </div>
+
+            <div className="quick-details">
+              <label className="field-label" htmlFor="visual-input">
+                Visual <span>optional · 2–4 words</span>
+              </label>
+              <input
+                id="visual-input"
+                className="text-input visual-input"
+                value={visual}
+                maxLength={60}
+                onChange={(event) => setVisual(event.target.value)}
+                placeholder="e.g. yellow tee kid"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className={`admission-result ${willQueue ? "result-queue" : "result-fit"}`}>
+              {willQueue ? (
+                <>
+                  <strong>ADD TO WAITING</strong>
+                  <span>
+                    {state.waiting.length
+                      ? "Queue already active · keep FIFO order"
+                      : `Needs ${selectedPax} · only ${Math.max(0, state.spacesLeft)} spaces left`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>{selectedPax} PAX FITS</strong>
+                  <span>{state.spacesLeft - selectedPax} spaces remain after entry</span>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className={`commit-family-button ${willQueue ? "commit-queue" : ""}`}
+              disabled={Boolean(pending)}
+              onClick={() => void handleAdd()}
+            >
+              {pending === "add"
+                ? "SAVING…"
+                : willQueue
+                  ? `ADD ${selectedPax} PAX TO WAITING`
+                  : `ENTER FAMILY · ${selectedPax} PAX`}
+            </button>
+          </div>
         </section>
 
         <section className="operating-section" aria-labelledby="inside-title">

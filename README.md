@@ -10,7 +10,7 @@ A one-hand, mobile-first capacity and family-timer tool for the Play Pot area at
 - The 15-minute mark is guidance. Reaching it changes the display but never checks a family out automatically.
 - There is one automatic operating mode. Overdue families stay subdued until somebody is waiting, then the longest-inside family becomes `ASK FIRST`.
 - Family numbers are allocated automatically, remain stable through the queue, and restart only when staff deliberately starts a new empty shift.
-- Ticket checking remains a physical staff action. The age field is optional, and a recorded `4+` status blocks admission pending a staff check.
+- Ticket checking remains a physical staff action. Adult and child counts are entered directly before admission.
 - Visual identifiers should be short, neutral clothing or object descriptions. Do not record names, ethnicity, nationality, ticket numbers, photos, or dates of birth.
 
 ## Recovery

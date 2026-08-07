@@ -61,6 +61,11 @@ test("keeps the operational safety rules in the authoritative API", async () => 
     client,
     /QUIET MODE|BUSY MODE|mode-switch|control-banner|theme-button|state\.mode/,
   );
+  assert.match(client, /className="front-counts"/);
+  assert.doesNotMatch(
+    client,
+    /PRESETS|open-composer-button|preset-grid|custom-count|age-check|UNDER 4|4\+ CHECK/,
+  );
 
   const hostingConfig = JSON.parse(hosting);
   assert.equal(hostingConfig.d1, "DB");
