@@ -14,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = new URL("/og.png", baseUrl).toString();
   const title = "Play Pot | Live Capacity & Family Timer";
   const description =
-    "A one-hand operating tool for Play Pot capacity, family timers, and the waiting queue.";
+    "A minimalist, phone-only tool for Play Pot capacity and family timers.";
 
   return {
     metadataBase: baseUrl,

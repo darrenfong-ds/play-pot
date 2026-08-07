@@ -1,46 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-
-type AgeStatus = "unchecked" | "under4" | "4plus";
-type FamilyStatus = "waiting" | "inside" | "completed" | "left_queue";
-
-type Family = {
-  id: number;
-  shiftId: number;
-  familyNumber: number;
-  adults: number;
-  children: number;
-  pax: number;
-  visual: string;
-  ageStatus: AgeStatus;
-  status: FamilyStatus;
-  createdAt: string;
-  queuedAt: string | null;
-  enteredAt: string | null;
-  dueAt: string | null;
-  departedAt: string | null;
-};
-
-type PlayPotState = {
-  capacity: number;
-  currentPax: number;
-  spacesLeft: number;
-  shift: { id: number; startedAt: string };
-  inside: Family[];
-  waiting: Family[];
-  history: Family[];
-  serverTime: string;
-};
-
-type ActionResponse = {
-  state: PlayPotState;
-  affected: Family | null;
-};
+import { useEffect, useRef, useState } from "react";
+import {
+  addLocalFamily,
+  CAPACITY,
+  createInitialState,
+  currentPax,
+  editLocalFamily,
+  familyDueAt,
+  familyPax,
+  insideFamilies,
+  LOCAL_STORAGE_BACKUP_KEY,
+  LOCAL_STORAGE_KEY,
+  markLocalFamilyOut,
+  readLocalState,
+  restoreLocalFamily,
+  serializeLocalState,
+  spacesLeft,
+  startLocalShift,
+  type Family,
+  type PlayPotState,
+} from "./play-pot-local";
 
 type UndoAction = {
-  type: "restoreInside";
-  id: number;
+  id: string;
 };
 
 type Notice = {
@@ -56,8 +39,6 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-class GuestSessionExpiredError extends Error {}
-
 const sgTime = new Intl.DateTimeFormat("en-SG", {
   hour: "numeric",
   minute: "2-digit",
@@ -66,7 +47,7 @@ const sgTime = new Intl.DateTimeFormat("en-SG", {
 });
 
 function formatClock(value: string | null) {
-  return value ? sgTime.format(new Date(value)) : "—";
+  return value ? sgTime.format(new Date(value)) : "-";
 }
 
 function familyLabel(family: Family) {
@@ -74,61 +55,33 @@ function familyLabel(family: Family) {
 }
 
 function timerState(family: Family, now: number) {
-  if (!family.dueAt) {
-    return { label: "NOT STARTED", overdue: false, reached: false };
-  }
-  const difference = new Date(family.dueAt).getTime() - now;
+  const dueAt = Date.parse(familyDueAt(family));
+  const difference = dueAt - now;
   if (difference > 0) {
     return {
       label: `${Math.max(1, Math.ceil(difference / 60_000))} MIN LEFT`,
       overdue: false,
-      reached: false,
     };
   }
-  const minutesOver = Math.floor(Math.abs(difference) / 60_000);
+
+  const minutesOver = Math.floor((now - dueAt) / 60_000);
   if (minutesOver < 1) {
-    return { label: "15 MIN REACHED", overdue: true, reached: true };
+    return { label: "15 MIN REACHED", overdue: true };
   }
-  return {
-    label: `+${minutesOver} MIN OVER`,
-    overdue: true,
-    reached: true,
-  };
-}
-
-function minutesInside(family: Family, now: number) {
-  if (!family.enteredAt) return 0;
-  return Math.max(
-    0,
-    Math.floor((now - new Date(family.enteredAt).getTime()) / 60_000),
-  );
-}
-
-async function postAction(payload: Record<string, unknown>) {
-  const response = await fetch("/api/state", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = (await response.json()) as ActionResponse & { error?: string };
-  if (response.status === 401) {
-    throw new GuestSessionExpiredError("Guest session expired.");
-  }
-  if (!response.ok) {
-    throw new Error(body.error ?? "Play Pot could not update.");
-  }
-  return body;
+  return { label: `+${minutesOver} MIN OVER`, overdue: true };
 }
 
 function Stepper({
   label,
   value,
   onChange,
-  max = 15,
+  min = 1,
+  max = CAPACITY,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  min?: number;
   max?: number;
 }) {
   return (
@@ -137,9 +90,10 @@ function Stepper({
       <button
         type="button"
         aria-label={`Remove one ${label.toLowerCase()}`}
-        onClick={() => onChange(Math.max(1, value - 1))}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
       >
-        −
+        -
       </button>
       <strong>{value}</strong>
       <button
@@ -169,11 +123,21 @@ function FamilyEditor({
 
   return (
     <details className="family-editor">
-      <summary>{family.visual ? "Correct details" : "+ Add visual / correct count"}</summary>
+      <summary>{family.visual ? "Correct details" : "Add visual / correct count"}</summary>
       <div className="editor-body">
         <div className="editor-steppers">
-          <Stepper label="Adults" value={adults} onChange={setAdults} />
-          <Stepper label="Children" value={children} onChange={setChildren} />
+          <Stepper
+            label="Adults"
+            value={adults}
+            max={CAPACITY - children}
+            onChange={setAdults}
+          />
+          <Stepper
+            label="Children"
+            value={children}
+            max={CAPACITY - adults}
+            onChange={setChildren}
+          />
         </div>
         <label className="field-label" htmlFor={`visual-${family.id}`}>
           Visual identifier
@@ -189,7 +153,7 @@ function FamilyEditor({
         <button
           className="save-correction"
           type="button"
-          disabled={disabled || adults + children > 15}
+          disabled={disabled}
           onClick={() => onSave(adults, children, visual)}
         >
           SAVE {adults + children} PAX
@@ -202,47 +166,36 @@ function FamilyEditor({
 function ActiveFamilyCard({
   family,
   now,
-  hasWaiting,
-  askFirst,
   disabled,
   onOut,
   onEdit,
 }: {
   family: Family;
   now: number;
-  hasWaiting: boolean;
-  askFirst: boolean;
   disabled: boolean;
   onOut: () => void;
   onEdit: (adults: number, children: number, visual: string) => void;
 }) {
   const timer = timerState(family, now);
-  const urgent = timer.overdue && hasWaiting;
-  const emphasized = timer.overdue;
 
   return (
-    <article
-      className={`family-card ${urgent ? "family-card-urgent" : emphasized ? "family-card-due" : ""}`}
-    >
+    <article className={`family-card ${timer.overdue ? "family-card-due" : ""}`}>
       <div className="family-main">
         <div className="family-id-block">
           <span className="family-id">{familyLabel(family)}</span>
           <span className="family-pax">
-            {family.adults}A {family.children}C · {family.pax} PAX
+            {family.adults}A {family.children}C / {familyPax(family)} PAX
           </span>
         </div>
-        <div
-          className={`timer-pill ${urgent ? "timer-urgent" : emphasized ? "timer-due" : ""}`}
-        >
-          {askFirst ? <span className="ask-first">ASK FIRST</span> : null}
+        <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
           <strong>{timer.label}</strong>
         </div>
       </div>
 
       <div className="family-times">
         <span>IN {formatClock(family.enteredAt)}</span>
-        <span aria-hidden="true">→</span>
-        <span>15 MIN {formatClock(family.dueAt)}</span>
+        <span aria-hidden="true">/</span>
+        <span>15 MIN {formatClock(familyDueAt(family))}</span>
       </div>
 
       <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
@@ -272,10 +225,13 @@ function ActiveFamilyCard({
 
 export default function PlayPotApp() {
   const [state, setState] = useState<PlayPotState | null>(null);
+  const stateRef = useRef<PlayPotState | null>(null);
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [guestPin, setGuestPin] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
+  const [unsaved, setUnsaved] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [customAdults, setCustomAdults] = useState(1);
   const [customChildren, setCustomChildren] = useState(1);
@@ -285,23 +241,88 @@ export default function PlayPotApp() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [installHelp, setInstallHelp] = useState("");
   const [isInstalled, setIsInstalled] = useState(false);
-  const mutationLock = useRef(false);
+
+  function showState(next: PlayPotState) {
+    stateRef.current = next;
+    setState(next);
+    setRecoveryRequired(false);
+  }
+
+  function commitState(next: PlayPotState) {
+    const previous = stateRef.current;
+    let saved = true;
+    try {
+      if (previous) {
+        window.localStorage.setItem(
+          LOCAL_STORAGE_BACKUP_KEY,
+          serializeLocalState(previous),
+        );
+      }
+      const serialized = serializeLocalState(next);
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
+      window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
+      setUnsaved(false);
+    } catch {
+      saved = false;
+      setUnsaved(true);
+    }
+    showState(next);
+    return saved;
+  }
+
+  function openThisPhoneState() {
+    const currentRaw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    const backupRaw = window.localStorage.getItem(LOCAL_STORAGE_BACKUP_KEY);
+    let next = readLocalState(currentRaw);
+    let recovered = false;
+
+    if (!next && backupRaw !== null) {
+      next = readLocalState(backupRaw);
+      recovered = Boolean(next);
+    }
+
+    if (!next && currentRaw === null && backupRaw === null) {
+      next = createInitialState(now, crypto.randomUUID());
+    }
+
+    if (!next) {
+      stateRef.current = null;
+      setState(null);
+      setRecoveryRequired(true);
+      setAuthState("ready");
+      return;
+    }
+
+    showState(next);
+    setAuthState("ready");
+    try {
+      const serialized = serializeLocalState(next);
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
+      window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
+      setUnsaved(false);
+    } catch {
+      setUnsaved(true);
+    }
+    if (recovered) {
+      setNotice({ tone: "info", message: "Recovered this phone's last valid record." });
+    }
+  }
 
   async function loadState() {
     setLoadError("");
     try {
-      const response = await fetch("/api/state", { cache: "no-store" });
-      const body = (await response.json()) as PlayPotState & { error?: string };
-      if (response.status === 401) {
+      const response = await fetch("/api/guest", { cache: "no-store" });
+      const body = (await response.json()) as { authenticated?: boolean; error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Could not open Play Pot.");
+      if (!body.authenticated) {
+        stateRef.current = null;
         setState(null);
         setAuthState("locked");
         return;
       }
-      if (!response.ok) throw new Error(body.error ?? "Could not load Play Pot.");
-      setState(body);
-      setAuthState("ready");
+      openThisPhoneState();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not load Play Pot.");
+      setLoadError(error instanceof Error ? error.message : "Could not open Play Pot.");
     }
   }
 
@@ -309,15 +330,25 @@ export default function PlayPotApp() {
     const initialLoad = window.setTimeout(() => void loadState(), 0);
     const tick = window.setInterval(() => setNow(Date.now()), 1_000);
     const refreshOnReturn = () => {
+      if (document.visibilityState !== "visible") return;
       setNow(Date.now());
-      if (document.visibilityState === "visible") void loadState();
+      void loadState();
+    };
+    const refreshFromThisBrowser = (event: StorageEvent) => {
+      if (event.key !== LOCAL_STORAGE_KEY || !event.newValue) return;
+      const next = readLocalState(event.newValue);
+      if (next) showState(next);
     };
     document.addEventListener("visibilitychange", refreshOnReturn);
+    window.addEventListener("storage", refreshFromThisBrowser);
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
+      window.removeEventListener("storage", refreshFromThisBrowser);
     };
+    // This effect owns the page lifecycle and deliberately runs once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -353,52 +384,22 @@ export default function PlayPotApp() {
 
   useEffect(() => {
     if (!notice) return;
-    const timeout = window.setTimeout(() => setNotice(null), notice.tone === "error" ? 10_000 : 8_000);
+    const timeout = window.setTimeout(
+      () => setNotice(null),
+      notice.tone === "error" ? 10_000 : 8_000,
+    );
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
-  const overdueFamilies = useMemo(
-    () => state?.inside.filter((family) => timerState(family, now).overdue) ?? [],
-    [state, now],
-  );
-  const askFirstId = state?.waiting.length ? overdueFamilies[0]?.id : undefined;
-  const queueHead = state?.waiting[0];
-  const queueHeadCanEnter = Boolean(
-    state && queueHead && queueHead.pax <= state.spacesLeft && state.spacesLeft >= 0,
-  );
-
   function vibrate() {
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-      navigator.vibrate(20);
-    }
+    if ("vibrate" in navigator) navigator.vibrate(20);
   }
 
-  async function runMutation(
-    key: string,
-    operation: () => Promise<void>,
-    onFailure?: () => void,
-  ) {
-    if (mutationLock.current) return;
-    mutationLock.current = true;
-    setPending(key);
-    try {
-      await operation();
-    } catch (error) {
-      onFailure?.();
-      if (error instanceof GuestSessionExpiredError) {
-        setState(null);
-        setAuthState("locked");
-        setNotice(null);
-        return;
-      }
-      setNotice({
-        tone: "error",
-        message: error instanceof Error ? error.message : "Play Pot could not update.",
-      });
-    } finally {
-      mutationLock.current = false;
-      setPending("");
-    }
+  function reportActionError(error: unknown) {
+    setNotice({
+      tone: "error",
+      message: error instanceof Error ? error.message : "Play Pot could not update.",
+    });
   }
 
   async function handleGuestUnlock(event: React.FormEvent<HTMLFormElement>) {
@@ -421,7 +422,7 @@ export default function PlayPotApp() {
       setGuestPin("");
       await loadState();
     } catch {
-      setUnlockError("Could not connect. Check the phone's internet connection.");
+      setUnlockError("Could not connect. Check this phone's internet connection.");
     } finally {
       setPending("");
     }
@@ -439,12 +440,10 @@ export default function PlayPotApp() {
       return;
     }
 
-    const guidance = "iPhone: Share → Add to Home Screen. Android: browser menu → Install app.";
-    if (state) {
-      setNotice({ tone: "info", message: guidance });
-    } else {
-      setInstallHelp(guidance);
-    }
+    const guidance =
+      "iPhone: Share > Add to Home Screen. Android: browser menu > Install app.";
+    if (state) setNotice({ tone: "info", message: guidance });
+    else setInstallHelp(guidance);
   }
 
   async function handleLock() {
@@ -453,138 +452,131 @@ export default function PlayPotApp() {
     try {
       const response = await fetch("/api/guest", { method: "DELETE" });
       if (!response.ok) throw new Error("Could not lock Play Pot.");
+      stateRef.current = null;
       setState(null);
       setAuthState("locked");
       setNotice(null);
       setGuestPin("");
     } catch (error) {
-      setNotice({
-        tone: "error",
-        message: error instanceof Error ? error.message : "Could not lock Play Pot.",
-      });
+      reportActionError(error);
     } finally {
       setPending("");
     }
   }
 
-  async function handleAdd() {
-    if (!state) return;
-    const pax = customAdults + customChildren;
-    const mustQueue =
-      state.waiting.length > 0 || state.spacesLeft < pax || state.currentPax > state.capacity;
-    const placement = mustQueue ? "waiting" : "inside";
-    const operationId = crypto.randomUUID();
-
-    await runMutation("add", async () => {
-      const result = await postAction({
-        type: "add",
-        operationId,
-        adults: customAdults,
-        children: customChildren,
-        visual,
-        ageStatus: "unchecked",
-        placement,
-      });
-      setState(result.state);
-      const id = result.affected ? familyLabel(result.affected) : "Family";
+  function handleAdd() {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = addLocalFamily(
+        current,
+        { adults: customAdults, children: customChildren, visual },
+        crypto.randomUUID(),
+        now,
+      );
+      const added = insideFamilies(next).find(
+        (family) => family.familyNumber === current.nextFamilyNumber,
+      );
+      commitState(next);
       setNotice({
         tone: "success",
-        message:
-          placement === "inside"
-            ? `${id} entered · ${pax} pax · 15-min timer started`
-            : `${id} added to waiting · ${pax} pax`,
+        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / 15-min timer started`,
       });
       setCustomAdults(1);
       setCustomChildren(1);
       setVisual("");
       vibrate();
-    });
+    } catch (error) {
+      reportActionError(error);
+    }
   }
 
-  async function handleOut(family: Family) {
-    if (!state) return;
-    const before = state;
-    const optimisticPax = state.currentPax - family.pax;
-    setState({
-      ...state,
-      currentPax: optimisticPax,
-      spacesLeft: state.capacity - optimisticPax,
-      inside: state.inside.filter((item) => item.id !== family.id),
-      history: [
-        { ...family, status: "completed", departedAt: new Date().toISOString() },
-        ...state.history,
-      ],
-    });
-
-    await runMutation(
-      `out-${family.id}`,
-      async () => {
-        const result = await postAction({ type: "out", id: family.id });
-        setState(result.state);
-        setNotice({
-          tone: "success",
-          message: `${familyLabel(family)} OUT · ${family.pax} spaces freed`,
-          undo: { type: "restoreInside", id: family.id },
-        });
-        vibrate();
-      },
-      () => setState(before),
-    );
-  }
-
-  async function handleEnterWaiting(family: Family) {
-    await runMutation(`enter-${family.id}`, async () => {
-      const result = await postAction({ type: "enterWaiting", id: family.id });
-      setState(result.state);
+  function handleOut(family: Family) {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = markLocalFamilyOut(current, family.id, now);
+      commitState(next);
       setNotice({
         tone: "success",
-        message: `${familyLabel(family)} entered · 15-min timer started now`,
+        message: `${familyLabel(family)} OUT / ${familyPax(family)} spaces freed`,
+        undo: { id: family.id },
       });
       vibrate();
-    });
+    } catch (error) {
+      reportActionError(error);
+    }
   }
 
-  async function handleEdit(
+  function handleEdit(
     family: Family,
     adults: number,
     children: number,
     nextVisual: string,
   ) {
-    await runMutation(`edit-${family.id}`, async () => {
-      const result = await postAction({
-        type: "editFamily",
-        id: family.id,
-        adults,
-        children,
-        visual: nextVisual,
-      });
-      setState(result.state);
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = editLocalFamily(
+        current,
+        family.id,
+        { adults, children, visual: nextVisual },
+        now,
+      );
+      commitState(next);
       setNotice({
         tone: "success",
-        message: `${familyLabel(family)} updated · ${adults + children} pax`,
+        message: `${familyLabel(family)} updated / ${adults + children} pax`,
       });
-    });
+    } catch (error) {
+      reportActionError(error);
+    }
   }
 
-  async function handleUndo(undo: UndoAction) {
-    await runMutation(`undo-${undo.id}`, async () => {
-      const result = await postAction(undo);
-      setState(result.state);
-      setNotice({ tone: "success", message: "Last action undone" });
+  function handleUndo(undo: UndoAction) {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = restoreLocalFamily(current, undo.id, now);
+      commitState(next);
+      setNotice({ tone: "success", message: "Last OUT action undone" });
       vibrate();
-    });
+    } catch (error) {
+      reportActionError(error);
+    }
   }
 
-  async function handleNewShift() {
-    if (!state || state.inside.length || state.waiting.length) return;
-    if (!window.confirm("Start a new shift? Completed history will be archived and IDs restart at F1.")) {
+  function handleNewShift() {
+    const current = stateRef.current;
+    if (!current || insideFamilies(current).length) return;
+    if (
+      !window.confirm(
+        "Start a new shift on this phone? Completed records will clear and family numbers restart at F1.",
+      )
+    ) {
       return;
     }
-    await runMutation("new-shift", async () => {
-      const result = await postAction({ type: "newShift" });
-      setState(result.state);
-      setNotice({ tone: "success", message: "New shift started · next family is F1" });
-    });
+    try {
+      const next = startLocalShift(current, crypto.randomUUID(), now);
+      commitState(next);
+      setNotice({ tone: "success", message: "New shift started / next family is F1" });
+    } catch (error) {
+      reportActionError(error);
+    }
+  }
+
+  function handleStartFresh() {
+    const next = createInitialState(now, crypto.randomUUID());
+    try {
+      const serialized = serializeLocalState(next);
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
+      window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
+      setUnsaved(false);
+    } catch {
+      setUnsaved(true);
+    }
+    showState(next);
+    setNotice({ tone: "info", message: "Fresh record started on this phone." });
   }
 
   if (authState === "locked") {
@@ -594,7 +586,7 @@ export default function PlayPotApp() {
           <div className="brand-mark">PP</div>
           <span className="guest-kicker">STAFF GUEST ACCESS</span>
           <h1 id="guest-title">PLAY POT</h1>
-          <p>Enter the shared 6-digit PIN to open the live capacity app.</p>
+          <p>Enter the staff PIN to open Play Pot on this phone.</p>
 
           <form className="guest-form" onSubmit={(event) => void handleGuestUnlock(event)}>
             <label htmlFor="guest-pin">Guest PIN</label>
@@ -607,7 +599,9 @@ export default function PlayPotApp() {
               pattern="[0-9]*"
               maxLength={6}
               value={guestPin}
-              onChange={(event) => setGuestPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(event) =>
+                setGuestPin(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               aria-describedby={unlockError ? "guest-error" : undefined}
             />
             {unlockError ? (
@@ -616,7 +610,7 @@ export default function PlayPotApp() {
               </p>
             ) : null}
             <button type="submit" disabled={guestPin.length !== 6 || pending === "unlock"}>
-              {pending === "unlock" ? "OPENING…" : "OPEN PLAY POT"}
+              {pending === "unlock" ? "OPENING..." : "OPEN PLAY POT"}
             </button>
           </form>
 
@@ -626,8 +620,21 @@ export default function PlayPotApp() {
             </button>
           ) : null}
           {installHelp ? <p className="install-help">{installHelp}</p> : null}
-          <small>Private staff tool · live family details stay behind this screen.</small>
+          <small>Private staff tool / family details stay on this phone.</small>
         </section>
+      </main>
+    );
+  }
+
+  if (recoveryRequired) {
+    return (
+      <main className="loading-screen">
+        <div className="brand-mark">PP</div>
+        <h1>CHECK THIS PHONE</h1>
+        <p>The saved record cannot be read safely.</p>
+        <button type="button" onClick={handleStartFresh}>
+          START FRESH ON THIS PHONE
+        </button>
       </main>
     );
   }
@@ -645,104 +652,77 @@ export default function PlayPotApp() {
             </button>
           </>
         ) : (
-          <p>Opening today&apos;s shift…</p>
+          <p>Opening this phone&apos;s shift...</p>
         )}
       </main>
     );
   }
 
+  const activeFamilies = insideFamilies(state);
+  const paxInside = currentPax(state);
+  const remaining = spacesLeft(state);
   const selectedPax = customAdults + customChildren;
-  const willQueue =
-    state.waiting.length > 0 ||
-    selectedPax > state.spacesLeft ||
-    state.currentPax > state.capacity;
-  const isOverCapacity = state.currentPax > state.capacity;
+  const fits = paxInside <= CAPACITY && selectedPax <= remaining;
+  const overCapacityBy = Math.max(0, paxInside - CAPACITY);
+  const busy = Boolean(pending);
 
   return (
     <main className="app-shell">
       <header className="status-header">
         <div className="brand-row">
           <h1>PLAY POT</h1>
-          <span className="live-label">GUEST · LIVE</span>
+          <span className="live-label">THIS PHONE / LIVE</span>
         </div>
 
         <div className="capacity-row">
           <div className="capacity-number">
-            <strong>{state.currentPax}</strong>
-            <span>/ {state.capacity} PAX</span>
+            <strong>{paxInside}</strong>
+            <span>/ {CAPACITY} PAX</span>
           </div>
-          <div className={`spaces-card ${state.spacesLeft <= 3 ? "spaces-low" : ""}`}>
-            <strong>{Math.max(0, state.spacesLeft)}</strong>
+          <div className={`spaces-card ${remaining <= 3 ? "spaces-low" : ""}`}>
+            <strong>{Math.max(0, remaining)}</strong>
             <span>SPACES LEFT</span>
-          </div>
-          <div className={`waiting-count ${state.waiting.length ? "has-waiting" : ""}`}>
-            <strong>{state.waiting.length}</strong>
-            <span>WAITING</span>
           </div>
         </div>
 
-        {isOverCapacity ? (
+        {overCapacityBy ? (
           <div className="over-capacity-alert" role="alert">
-            OVER CAPACITY BY {state.currentPax - state.capacity} · STOP ENTRY
+            OVER CAPACITY BY {overCapacityBy} / STOP ENTRY
+          </div>
+        ) : null}
+        {unsaved ? (
+          <div className="storage-alert" role="alert">
+            NOT SAVED ON THIS PHONE / KEEP THIS SCREEN OPEN
           </div>
         ) : null}
       </header>
 
       <div className="content-stack">
-        {queueHead ? (
-          <section
-            className={`queue-alert ${queueHeadCanEnter ? "queue-alert-ready" : ""}`}
-            aria-live="polite"
-          >
-            <div>
-              <span>NEXT IN QUEUE</span>
-              <strong>
-                {queueHeadCanEnter
-                  ? `${familyLabel(queueHead)} CAN ENTER NOW`
-                  : `${familyLabel(queueHead)} NEEDS ${queueHead.pax} SPACES`}
-              </strong>
-            </div>
-            {queueHeadCanEnter ? (
-              <button
-                type="button"
-                onClick={() => void handleEnterWaiting(queueHead)}
-                disabled={Boolean(pending)}
-              >
-                ENTER
-              </button>
-            ) : (
-              <span className="need-more">
-                {Math.max(0, queueHead.pax - state.spacesLeft)} MORE NEEDED
-              </span>
-            )}
-          </section>
-        ) : null}
-
         <section className="admission-section" aria-labelledby="admission-title">
           <div className="admission-composer">
             <div className="section-heading">
               <h2 id="admission-title">New family</h2>
-              <span className="policy-reminder">CHECK PASS · 15 PAX MAX</span>
+              <span className="policy-reminder">15 PAX MAX</span>
             </div>
 
             <div className="front-counts">
               <Stepper
                 label="Adults"
                 value={customAdults}
-                max={15 - customChildren}
+                max={CAPACITY - customChildren}
                 onChange={setCustomAdults}
               />
               <Stepper
                 label="Children"
                 value={customChildren}
-                max={15 - customAdults}
+                max={CAPACITY - customAdults}
                 onChange={setCustomChildren}
               />
             </div>
 
             <div className="quick-details">
               <label className="field-label" htmlFor="visual-input">
-                Visual <span>optional · 2–4 words</span>
+                Visual <span>optional / 2-4 words</span>
               </label>
               <input
                 id="visual-input"
@@ -755,72 +735,54 @@ export default function PlayPotApp() {
               />
             </div>
 
-            <div className={`admission-result ${willQueue ? "result-queue" : "result-fit"}`}>
-              {willQueue ? (
+            <div className={`admission-result ${fits ? "result-fit" : "result-block"}`}>
+              {fits ? (
                 <>
-                  <strong>ADD TO WAITING</strong>
-                  <span>
-                    {state.waiting.length
-                      ? "Queue already active · keep FIFO order"
-                      : `Needs ${selectedPax} · only ${Math.max(0, state.spacesLeft)} spaces left`}
-                  </span>
+                  <strong>{selectedPax} PAX FITS</strong>
+                  <span>{remaining - selectedPax} spaces remain after entry</span>
                 </>
               ) : (
                 <>
-                  <strong>{selectedPax} PAX FITS</strong>
-                  <span>{state.spacesLeft - selectedPax} spaces remain after entry</span>
+                  <strong>ENTRY BLOCKED</strong>
+                  <span>
+                    Needs {selectedPax} / only {Math.max(0, remaining)} spaces left
+                  </span>
                 </>
               )}
             </div>
 
             <button
               type="button"
-              className={`commit-family-button ${willQueue ? "commit-queue" : ""}`}
-              disabled={Boolean(pending)}
-              onClick={() => void handleAdd()}
+              className="commit-family-button"
+              disabled={busy || !fits}
+              onClick={handleAdd}
             >
-              {pending === "add"
-                ? "SAVING…"
-                : willQueue
-                  ? `ADD ${selectedPax} PAX TO WAITING`
-                  : `ENTER FAMILY · ${selectedPax} PAX`}
+              {fits
+                ? `ENTER FAMILY / ${selectedPax} PAX`
+                : remaining <= 0
+                  ? "FULL / STOP ENTRY"
+                  : `CANNOT ENTER / ${selectedPax} PAX`}
             </button>
           </div>
         </section>
 
         <section className="operating-section" aria-labelledby="inside-title">
-          <div className="section-heading sticky-section-title">
+          <div className="section-heading">
             <h2 id="inside-title">Inside now</h2>
-            <span className="section-count">{state.inside.length} FAMILIES</span>
+            <span className="section-count">{activeFamilies.length} FAMILIES</span>
           </div>
 
-          {state.waiting.length && overdueFamilies.length ? (
-            <div className="turnover-guidance">
-              <strong>
-                {familyLabel(overdueFamilies[0])} · {minutesInside(overdueFamilies[0], now)} MIN · ASK FIRST
-              </strong>
-              <span>Waiting family outside · longest inside is shown first</span>
-            </div>
-          ) : state.waiting.length ? (
-            <div className="turnover-guidance turnover-neutral">
-              <strong>NO FAMILY HAS REACHED 15 MIN YET</strong>
-              <span>Keep queue order · do not disturb early</span>
-            </div>
-          ) : null}
-
           <div className="family-list">
-            {state.inside.length ? (
-              state.inside.map((family) => (
+            {activeFamilies.length ? (
+              activeFamilies.map((family) => (
                 <ActiveFamilyCard
                   key={family.id}
                   family={family}
                   now={now}
-                  hasWaiting={state.waiting.length > 0}
-                  askFirst={family.id === askFirstId}
-                  disabled={Boolean(pending)}
-                  onOut={() => void handleOut(family)}
+                  disabled={busy}
+                  onOut={() => handleOut(family)}
                   onEdit={(adults, children, nextVisual) =>
-                    void handleEdit(family, adults, children, nextVisual)
+                    handleEdit(family, adults, children, nextVisual)
                   }
                 />
               ))
@@ -835,8 +797,8 @@ export default function PlayPotApp() {
 
         <footer className="shift-footer">
           <div>
-            <strong>SHIFT {state.shift.id}</strong>
-            <span>Started {formatClock(state.shift.startedAt)} · use one active phone</span>
+            <strong>SHIFT {state.shift.number} / THIS PHONE ONLY</strong>
+            <span>Started {formatClock(state.shift.startedAt)} / not shared</span>
           </div>
           <div className="shift-footer-actions">
             {!isInstalled ? (
@@ -844,13 +806,13 @@ export default function PlayPotApp() {
                 INSTALL APP
               </button>
             ) : null}
-            <button type="button" disabled={Boolean(pending)} onClick={() => void handleLock()}>
+            <button type="button" disabled={busy} onClick={() => void handleLock()}>
               LOCK
             </button>
             <button
               type="button"
-              disabled={Boolean(pending) || state.inside.length > 0 || state.waiting.length > 0}
-              onClick={() => void handleNewShift()}
+              disabled={busy || activeFamilies.length > 0}
+              onClick={handleNewShift}
             >
               NEW SHIFT
             </button>
@@ -862,12 +824,12 @@ export default function PlayPotApp() {
         <div className={`toast toast-${notice.tone}`} role="status" aria-live="polite">
           <span>{notice.message}</span>
           {notice.undo ? (
-            <button type="button" onClick={() => void handleUndo(notice.undo!)}>
+            <button type="button" onClick={() => handleUndo(notice.undo!)}>
               UNDO
             </button>
           ) : (
             <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss message">
-              ×
+              X
             </button>
           )}
         </div>

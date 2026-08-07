@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Play Pot Operations",
   "short_name": "Play Pot",
-  "description": "Live Play Pot capacity and family timer for museum staff.",
+  "description": "On-device Play Pot capacity and family timers for museum staff.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
