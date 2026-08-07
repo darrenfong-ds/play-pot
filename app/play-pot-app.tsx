@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Mode = "quiet" | "busy";
-type Theme = "light" | "dark";
 type AgeStatus = "unchecked" | "under4" | "4plus";
 type FamilyStatus = "waiting" | "inside" | "completed" | "left_queue";
 
@@ -28,7 +26,6 @@ type PlayPotState = {
   capacity: number;
   currentPax: number;
   spacesLeft: number;
-  mode: Mode;
   shift: { id: number; startedAt: string };
   inside: Family[];
   waiting: Family[];
@@ -197,7 +194,6 @@ function FamilyEditor({
 function ActiveFamilyCard({
   family,
   now,
-  mode,
   hasWaiting,
   askFirst,
   disabled,
@@ -206,7 +202,6 @@ function ActiveFamilyCard({
 }: {
   family: Family;
   now: number;
-  mode: Mode;
   hasWaiting: boolean;
   askFirst: boolean;
   disabled: boolean;
@@ -215,7 +210,7 @@ function ActiveFamilyCard({
 }) {
   const timer = timerState(family, now);
   const urgent = timer.overdue && hasWaiting;
-  const emphasized = timer.overdue && (mode === "busy" || hasWaiting);
+  const emphasized = timer.overdue;
 
   return (
     <article
@@ -279,7 +274,6 @@ export default function PlayPotApp() {
   const [ageStatus, setAgeStatus] = useState<AgeStatus>("unchecked");
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [theme, setTheme] = useState<Theme>("light");
   const mutationLock = useRef(false);
 
   async function loadState() {
@@ -306,14 +300,6 @@ export default function PlayPotApp() {
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
     };
-  }, []);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("play-pot-theme");
-    const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme: Theme = saved === "dark" || (!saved && preferred) ? "dark" : "light";
-    setTheme(nextTheme);
-    document.documentElement.dataset.theme = nextTheme;
   }, []);
 
   useEffect(() => {
@@ -472,20 +458,6 @@ export default function PlayPotApp() {
     });
   }
 
-  async function handleMode(mode: Mode) {
-    if (!state || state.mode === mode) return;
-    const before = state;
-    setState({ ...state, mode });
-    await runMutation(
-      "mode",
-      async () => {
-        const result = await postAction({ type: "setMode", mode });
-        setState(result.state);
-      },
-      () => setState(before),
-    );
-  }
-
   async function handleNewShift() {
     if (!state || state.inside.length || state.waiting.length) return;
     if (!window.confirm("Start a new shift? Completed history will be archived and IDs restart at F1.")) {
@@ -496,13 +468,6 @@ export default function PlayPotApp() {
       setState(result.state);
       setNotice({ tone: "success", message: "New shift started · next family is F1" });
     });
-  }
-
-  function toggleTheme() {
-    const nextTheme: Theme = theme === "light" ? "dark" : "light";
-    setTheme(nextTheme);
-    document.documentElement.dataset.theme = nextTheme;
-    window.localStorage.setItem("play-pot-theme", nextTheme);
   }
 
   if (!state) {
@@ -535,20 +500,10 @@ export default function PlayPotApp() {
 
   return (
     <main className="app-shell">
-      <header className={`status-header status-${state.mode}`}>
+      <header className="status-header">
         <div className="brand-row">
-          <div>
-            <span className="micro-label">CHILDREN&apos;S MUSEUM SINGAPORE</span>
-            <h1>PLAY POT</h1>
-          </div>
-          <button
-            type="button"
-            className="theme-button"
-            onClick={toggleTheme}
-            aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`}
-          >
-            {theme === "light" ? "DARK" : "LIGHT"}
-          </button>
+          <h1>PLAY POT</h1>
+          <span className="live-label">LIVE</span>
         </div>
 
         <div className="capacity-row">
@@ -566,25 +521,6 @@ export default function PlayPotApp() {
           </div>
         </div>
 
-        <div className="mode-switch" aria-label="Operating mode">
-          <button
-            type="button"
-            className={state.mode === "quiet" ? "mode-active" : ""}
-            onClick={() => void handleMode("quiet")}
-            disabled={Boolean(pending)}
-          >
-            QUIET MODE
-          </button>
-          <button
-            type="button"
-            className={state.mode === "busy" ? "mode-active busy-active" : ""}
-            onClick={() => void handleMode("busy")}
-            disabled={Boolean(pending)}
-          >
-            BUSY MODE
-          </button>
-        </div>
-
         {isOverCapacity ? (
           <div className="over-capacity-alert" role="alert">
             OVER CAPACITY BY {state.currentPax - state.capacity} · STOP ENTRY
@@ -593,13 +529,6 @@ export default function PlayPotApp() {
       </header>
 
       <div className="content-stack">
-        {state.mode === "busy" ? (
-          <div className="control-banner">
-            <strong>CONTROL ENTRY</strong>
-            <span>One family at a time · check pass · count pax</span>
-          </div>
-        ) : null}
-
         {queueHead ? (
           <section
             className={`queue-alert ${queueHeadCanEnter ? "queue-alert-ready" : ""}`}
@@ -644,11 +573,8 @@ export default function PlayPotApp() {
           {composerOpen ? (
             <div id="admission-composer" className="admission-composer">
               <div className="section-heading">
-                <div>
-                  <span className="eyebrow">STEP 1</span>
-                  <h2 id="admission-title">Tap family count</h2>
-                </div>
-                <span className="policy-reminder">15 PAX HARD LIMIT</span>
+                <h2 id="admission-title">Family count</h2>
+                <span className="policy-reminder">CHECK PASS · 15 PAX MAX</span>
               </div>
 
               <div className="preset-grid">
@@ -673,7 +599,7 @@ export default function PlayPotApp() {
               </div>
 
               <details className="custom-count">
-                <summary>CUSTOM COUNT</summary>
+                <summary>CUSTOM COUNT / AGE</summary>
                 <div className="custom-body">
                   <Stepper label="Adults" value={customAdults} onChange={setCustomAdults} />
                   <Stepper label="Children" value={customChildren} onChange={setCustomChildren} />
@@ -687,6 +613,32 @@ export default function PlayPotApp() {
                   >
                     USE {customAdults + customChildren} PAX
                   </button>
+                  <fieldset className="age-check">
+                    <legend>Age check · optional</legend>
+                    <div>
+                      <button
+                        type="button"
+                        className={ageStatus === "unchecked" ? "age-selected" : ""}
+                        onClick={() => setAgeStatus("unchecked")}
+                      >
+                        NOT RECORDED
+                      </button>
+                      <button
+                        type="button"
+                        className={ageStatus === "under4" ? "age-selected age-ok" : ""}
+                        onClick={() => setAgeStatus("under4")}
+                      >
+                        UNDER 4 ✓
+                      </button>
+                      <button
+                        type="button"
+                        className={ageStatus === "4plus" ? "age-selected age-stop" : ""}
+                        onClick={() => setAgeStatus("4plus")}
+                      >
+                        4+ CHECK
+                      </button>
+                    </div>
+                  </fieldset>
                 </div>
               </details>
 
@@ -704,34 +656,6 @@ export default function PlayPotApp() {
                   autoComplete="off"
                 />
 
-                <fieldset className="age-check">
-                  <legend>
-                    Age check <span>optional</span>
-                  </legend>
-                  <div>
-                    <button
-                      type="button"
-                      className={ageStatus === "unchecked" ? "age-selected" : ""}
-                      onClick={() => setAgeStatus("unchecked")}
-                    >
-                      NOT RECORDED
-                    </button>
-                    <button
-                      type="button"
-                      className={ageStatus === "under4" ? "age-selected age-ok" : ""}
-                      onClick={() => setAgeStatus("under4")}
-                    >
-                      UNDER 4 ✓
-                    </button>
-                    <button
-                      type="button"
-                      className={ageStatus === "4plus" ? "age-selected age-stop" : ""}
-                      onClick={() => setAgeStatus("4plus")}
-                    >
-                      4+ CHECK
-                    </button>
-                  </div>
-                </fieldset>
               </div>
 
               {ageStatus === "4plus" ? (
@@ -784,10 +708,7 @@ export default function PlayPotApp() {
 
         <section className="operating-section" aria-labelledby="inside-title">
           <div className="section-heading sticky-section-title">
-            <div>
-              <span className="eyebrow">LIVE</span>
-              <h2 id="inside-title">Inside now</h2>
-            </div>
+            <h2 id="inside-title">Inside now</h2>
             <span className="section-count">{state.inside.length} FAMILIES</span>
           </div>
 
@@ -812,7 +733,6 @@ export default function PlayPotApp() {
                   key={family.id}
                   family={family}
                   now={now}
-                  mode={state.mode}
                   hasWaiting={state.waiting.length > 0}
                   askFirst={family.id === askFirstId}
                   disabled={Boolean(pending)}
