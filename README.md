@@ -2,6 +2,8 @@
 
 A one-hand, mobile-first capacity and family-timer tool for the Play Pot area at Children’s Museum Singapore.
 
+The deployed site is an installable web app. Staff enter a shared six-digit guest PIN, then can add it to an iPhone or Android home screen. Live operational data remains server-protected and is never placed in the app shell or offline cache.
+
 ## Operating rules
 
 - Capacity is always derived from families whose status is `inside`.

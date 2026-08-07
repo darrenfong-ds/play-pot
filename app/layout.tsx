@@ -21,6 +21,16 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     applicationName: "Play Pot",
+    manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: "Play Pot",
+    },
     openGraph: {
       title,
       description,
@@ -40,6 +50,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
   themeColor: "#12313a",
 };
 

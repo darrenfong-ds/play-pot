@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { guardGuestRequest, guardSameOriginJson } from "../../guest-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -489,17 +490,19 @@ function errorResponse(error: unknown) {
   if (error instanceof ApiError) {
     return Response.json(
       { error: error.message, code: error.code },
-      { status: error.status },
+      { status: error.status, headers: { "Cache-Control": "no-store" } },
     );
   }
-  const message = error instanceof Error ? error.message : "Unexpected error";
   return Response.json(
-    { error: "Play Pot could not update. Please try again.", detail: message },
-    { status: 500 },
+    { error: "Play Pot could not update. Please try again." },
+    { status: 500, headers: { "Cache-Control": "no-store" } },
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const guestResponse = await guardGuestRequest(request);
+  if (guestResponse) return guestResponse;
+
   try {
     await ensureSchema();
     return Response.json(await getSnapshot(), {
@@ -511,6 +514,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const guestResponse = await guardGuestRequest(request);
+  if (guestResponse) return guestResponse;
+  const requestError = guardSameOriginJson(request);
+  if (requestError) return requestError;
+
   try {
     await ensureSchema();
     const payload = (await request.json()) as Record<string, unknown>;
@@ -555,7 +563,10 @@ export async function POST(request: Request) {
         throw new ApiError(400, "invalid_action", "Choose a valid Play Pot action.");
     }
 
-    return Response.json({ state: await getSnapshot(), affected });
+    return Response.json(
+      { state: await getSnapshot(), affected },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return errorResponse(error);
   }

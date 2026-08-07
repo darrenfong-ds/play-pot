@@ -49,6 +49,15 @@ type Notice = {
   undo?: UndoAction;
 };
 
+type AuthState = "checking" | "locked" | "ready";
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+class GuestSessionExpiredError extends Error {}
+
 const sgTime = new Intl.DateTimeFormat("en-SG", {
   hour: "numeric",
   minute: "2-digit",
@@ -102,6 +111,9 @@ async function postAction(payload: Record<string, unknown>) {
     body: JSON.stringify(payload),
   });
   const body = (await response.json()) as ActionResponse & { error?: string };
+  if (response.status === 401) {
+    throw new GuestSessionExpiredError("Guest session expired.");
+  }
   if (!response.ok) {
     throw new Error(body.error ?? "Play Pot could not update.");
   }
@@ -260,6 +272,9 @@ function ActiveFamilyCard({
 
 export default function PlayPotApp() {
   const [state, setState] = useState<PlayPotState | null>(null);
+  const [authState, setAuthState] = useState<AuthState>("checking");
+  const [guestPin, setGuestPin] = useState("");
+  const [unlockError, setUnlockError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [customAdults, setCustomAdults] = useState(1);
@@ -267,6 +282,9 @@ export default function PlayPotApp() {
   const [visual, setVisual] = useState("");
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [installHelp, setInstallHelp] = useState("");
+  const [isInstalled, setIsInstalled] = useState(false);
   const mutationLock = useRef(false);
 
   async function loadState() {
@@ -274,8 +292,14 @@ export default function PlayPotApp() {
     try {
       const response = await fetch("/api/state", { cache: "no-store" });
       const body = (await response.json()) as PlayPotState & { error?: string };
+      if (response.status === 401) {
+        setState(null);
+        setAuthState("locked");
+        return;
+      }
       if (!response.ok) throw new Error(body.error ?? "Could not load Play Pot.");
       setState(body);
+      setAuthState("ready");
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Could not load Play Pot.");
     }
@@ -293,6 +317,37 @@ export default function PlayPotApp() {
       window.clearTimeout(initialLoad);
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
+  }, []);
+
+  useEffect(() => {
+    const rememberInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    const markInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+      setInstallHelp("");
+    };
+    const detectInstalled = window.setTimeout(() => {
+      const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+      setIsInstalled(
+        window.matchMedia("(display-mode: standalone)").matches ||
+          navigatorWithStandalone.standalone === true,
+      );
+    }, 0);
+
+    window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
+    window.addEventListener("appinstalled", markInstalled);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+
+    return () => {
+      window.clearTimeout(detectInstalled);
+      window.removeEventListener("beforeinstallprompt", rememberInstallPrompt);
+      window.removeEventListener("appinstalled", markInstalled);
     };
   }, []);
 
@@ -330,12 +385,84 @@ export default function PlayPotApp() {
       await operation();
     } catch (error) {
       onFailure?.();
+      if (error instanceof GuestSessionExpiredError) {
+        setState(null);
+        setAuthState("locked");
+        setNotice(null);
+        return;
+      }
       setNotice({
         tone: "error",
         message: error instanceof Error ? error.message : "Play Pot could not update.",
       });
     } finally {
       mutationLock.current = false;
+      setPending("");
+    }
+  }
+
+  async function handleGuestUnlock(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (guestPin.length !== 6 || pending) return;
+
+    setPending("unlock");
+    setUnlockError("");
+    try {
+      const response = await fetch("/api/guest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: guestPin }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setUnlockError(body.error ?? "Could not open Play Pot.");
+        return;
+      }
+      setGuestPin("");
+      await loadState();
+    } catch {
+      setUnlockError("Could not connect. Check the phone's internet connection.");
+    } finally {
+      setPending("");
+    }
+  }
+
+  async function handleInstall() {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      if (choice.outcome === "accepted") {
+        setIsInstalled(true);
+        setInstallHelp("");
+      }
+      return;
+    }
+
+    const guidance = "iPhone: Share → Add to Home Screen. Android: browser menu → Install app.";
+    if (state) {
+      setNotice({ tone: "info", message: guidance });
+    } else {
+      setInstallHelp(guidance);
+    }
+  }
+
+  async function handleLock() {
+    if (pending) return;
+    setPending("lock");
+    try {
+      const response = await fetch("/api/guest", { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not lock Play Pot.");
+      setState(null);
+      setAuthState("locked");
+      setNotice(null);
+      setGuestPin("");
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Could not lock Play Pot.",
+      });
+    } finally {
       setPending("");
     }
   }
@@ -460,6 +587,51 @@ export default function PlayPotApp() {
     });
   }
 
+  if (authState === "locked") {
+    return (
+      <main className="guest-screen">
+        <section className="guest-card" aria-labelledby="guest-title">
+          <div className="brand-mark">PP</div>
+          <span className="guest-kicker">STAFF GUEST ACCESS</span>
+          <h1 id="guest-title">PLAY POT</h1>
+          <p>Enter the shared 6-digit PIN to open the live capacity app.</p>
+
+          <form className="guest-form" onSubmit={(event) => void handleGuestUnlock(event)}>
+            <label htmlFor="guest-pin">Guest PIN</label>
+            <input
+              id="guest-pin"
+              className="guest-pin-input"
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={guestPin}
+              onChange={(event) => setGuestPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              aria-describedby={unlockError ? "guest-error" : undefined}
+            />
+            {unlockError ? (
+              <p id="guest-error" className="guest-error" role="alert">
+                {unlockError}
+              </p>
+            ) : null}
+            <button type="submit" disabled={guestPin.length !== 6 || pending === "unlock"}>
+              {pending === "unlock" ? "OPENING…" : "OPEN PLAY POT"}
+            </button>
+          </form>
+
+          {!isInstalled ? (
+            <button type="button" className="install-app-button" onClick={() => void handleInstall()}>
+              INSTALL ON THIS PHONE
+            </button>
+          ) : null}
+          {installHelp ? <p className="install-help">{installHelp}</p> : null}
+          <small>Private staff tool · live family details stay behind this screen.</small>
+        </section>
+      </main>
+    );
+  }
+
   if (!state) {
     return (
       <main className="loading-screen">
@@ -491,7 +663,7 @@ export default function PlayPotApp() {
       <header className="status-header">
         <div className="brand-row">
           <h1>PLAY POT</h1>
-          <span className="live-label">LIVE</span>
+          <span className="live-label">GUEST · LIVE</span>
         </div>
 
         <div className="capacity-row">
@@ -666,13 +838,23 @@ export default function PlayPotApp() {
             <strong>SHIFT {state.shift.id}</strong>
             <span>Started {formatClock(state.shift.startedAt)} · use one active phone</span>
           </div>
-          <button
-            type="button"
-            disabled={Boolean(pending) || state.inside.length > 0 || state.waiting.length > 0}
-            onClick={() => void handleNewShift()}
-          >
-            NEW SHIFT
-          </button>
+          <div className="shift-footer-actions">
+            {!isInstalled ? (
+              <button type="button" onClick={() => void handleInstall()}>
+                INSTALL APP
+              </button>
+            ) : null}
+            <button type="button" disabled={Boolean(pending)} onClick={() => void handleLock()}>
+              LOCK
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(pending) || state.inside.length > 0 || state.waiting.length > 0}
+              onClick={() => void handleNewShift()}
+            >
+              NEW SHIFT
+            </button>
+          </div>
         </footer>
       </div>
 
