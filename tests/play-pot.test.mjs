@@ -56,6 +56,7 @@ test("keeps the operational safety rules in the authoritative API", async () => 
   assert.match(client, /ADD .* TO WAITING/);
   assert.match(client, /className="out-button"/);
   assert.match(client, /state\.waiting\.length > 0/);
+  assert.doesNotMatch(client, /FIFO QUEUE|history-section|WaitingCard/);
 
   const hostingConfig = JSON.parse(hosting);
   assert.equal(hostingConfig.d1, "DB");

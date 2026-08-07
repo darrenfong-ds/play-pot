@@ -329,8 +329,7 @@ button:disabled {
 }
 
 .admission-section,
-.operating-section,
-.history-section {
+.operating-section {
   margin-bottom: 1rem;
 }
 
@@ -436,8 +435,7 @@ button:disabled {
 }
 
 .custom-count,
-.family-editor,
-.history-section {
+.family-editor {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
@@ -448,8 +446,7 @@ button:disabled {
 }
 
 .custom-count summary,
-.family-editor summary,
-.history-section summary {
+.family-editor summary {
   min-height: 48px;
   display: flex;
   align-items: center;
@@ -464,21 +461,18 @@ button:disabled {
 }
 
 .custom-count summary::-webkit-details-marker,
-.family-editor summary::-webkit-details-marker,
-.history-section summary::-webkit-details-marker {
+.family-editor summary::-webkit-details-marker {
   display: none;
 }
 
 .custom-count summary::after,
-.family-editor summary::after,
-.history-section summary::after {
+.family-editor summary::after {
   content: "+";
   font-size: 1.2rem;
 }
 
 .custom-count[open] summary::after,
-.family-editor[open] summary::after,
-.history-section[open] summary::after {
+.family-editor[open] summary::after {
   content: "−";
 }
 
@@ -675,8 +669,7 @@ button:disabled {
   padding-top: 0.35rem;
 }
 
-.family-list,
-.waiting-list {
+.family-list {
   display: grid;
   gap: 0.72rem;
 }
@@ -712,8 +705,7 @@ button:disabled {
   color: var(--ink);
 }
 
-.family-card,
-.waiting-card {
+.family-card {
   overflow: hidden;
   padding: 0.9rem;
   border: 2px solid var(--line);
@@ -813,8 +805,7 @@ button:disabled {
   font-weight: 600;
 }
 
-.family-actions,
-.waiting-actions {
+.family-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 104px;
   align-items: start;
@@ -832,8 +823,7 @@ button:disabled {
   gap: 0.2rem;
 }
 
-.out-button,
-.remove-button {
+.out-button {
   min-height: 58px;
   border: 0;
   border-radius: 13px;
@@ -845,12 +835,6 @@ button:disabled {
 .out-button {
   background: var(--coral);
   color: #fff;
-}
-
-.remove-button {
-  background: var(--surface-soft);
-  color: var(--muted);
-  font-size: 0.62rem;
 }
 
 .empty-state {
@@ -869,112 +853,6 @@ button:disabled {
   color: var(--teal);
   font-size: 0.8rem;
   letter-spacing: 0.08em;
-}
-
-.compact-empty {
-  min-height: 70px;
-}
-
-.waiting-section {
-  margin-top: 1.25rem;
-}
-
-.waiting-card {
-  border-color: #d7a93e;
-}
-
-.waiting-ready {
-  border-color: var(--teal);
-  box-shadow: inset 6px 0 0 var(--teal), var(--shadow);
-}
-
-.queue-position {
-  margin: -0.9rem -0.9rem 0.75rem;
-  padding: 0.44rem 0.9rem;
-  background: var(--amber-soft);
-  color: var(--ink);
-  font-size: 0.63rem;
-  font-weight: 950;
-  letter-spacing: 0.08em;
-}
-
-.waiting-ready .queue-position {
-  background: var(--green-soft);
-  color: var(--teal-dark);
-}
-
-.wait-time {
-  padding: 0.4rem 0.52rem;
-  border-radius: 8px;
-  background: var(--surface-soft);
-  color: var(--muted);
-  font-size: 0.64rem;
-  font-weight: 900;
-}
-
-.enter-waiting-button {
-  width: 100%;
-  min-height: 57px;
-  margin: 0.35rem 0 0.65rem;
-  border: 0;
-  border-radius: 12px;
-  background: var(--teal);
-  color: #fff;
-  font-size: 0.81rem;
-  font-weight: 950;
-  letter-spacing: 0.04em;
-}
-
-.queue-blocked {
-  margin: 0.35rem 0 0.65rem;
-  padding: 0.72rem;
-  border-radius: 10px;
-  background: var(--amber-soft);
-  text-align: center;
-  font-size: 0.72rem;
-  font-weight: 950;
-}
-
-.history-section {
-  overflow: hidden;
-  margin-top: 1.5rem;
-}
-
-.history-section summary strong {
-  font-size: 0.68rem;
-}
-
-.history-list {
-  border-top: 1px solid var(--line);
-}
-
-.history-list > p {
-  margin: 0;
-  padding: 1rem;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.history-row {
-  display: grid;
-  grid-template-columns: 42px 1fr;
-  gap: 0.25rem 0.6rem;
-  padding: 0.72rem 0.8rem;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.74rem;
-}
-
-.history-row:last-child {
-  border-bottom: 0;
-}
-
-.history-row strong {
-  grid-row: span 2;
-  font-size: 1rem;
-}
-
-.history-row span {
-  color: var(--muted);
 }
 
 .shift-footer {
@@ -1114,8 +992,7 @@ button:disabled {
     font-size: 2.55rem;
   }
 
-  .family-actions,
-  .waiting-actions {
+  .family-actions {
     grid-template-columns: minmax(0, 1fr) 92px;
   }
 

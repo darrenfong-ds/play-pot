@@ -42,7 +42,7 @@ type ActionResponse = {
 };
 
 type UndoAction = {
-  type: "restoreInside" | "restoreWaiting";
+  type: "restoreInside";
   id: number;
 };
 
@@ -267,85 +267,6 @@ function ActiveFamilyCard({
   );
 }
 
-function WaitingCard({
-  family,
-  position,
-  isHead,
-  spacesLeft,
-  disabled,
-  now,
-  onEnter,
-  onRemove,
-  onEdit,
-}: {
-  family: Family;
-  position: number;
-  isHead: boolean;
-  spacesLeft: number;
-  disabled: boolean;
-  now: number;
-  onEnter: () => void;
-  onRemove: () => void;
-  onEdit: (adults: number, children: number, visual: string) => void;
-}) {
-  const canEnter = isHead && family.pax <= spacesLeft;
-  const waited = family.queuedAt
-    ? Math.max(0, Math.floor((now - new Date(family.queuedAt).getTime()) / 60_000))
-    : 0;
-
-  return (
-    <article className={`waiting-card ${canEnter ? "waiting-ready" : ""}`}>
-      <div className="queue-position">WAITING {position}</div>
-      <div className="waiting-summary">
-        <div>
-          <strong>{familyLabel(family)}</strong>
-          <span>
-            {family.adults}A {family.children}C · {family.pax} PAX
-          </span>
-        </div>
-        <span className="wait-time">{waited} MIN WAIT</span>
-      </div>
-      <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
-        {family.visual || "No visual yet"}
-      </p>
-
-      {isHead ? (
-        canEnter ? (
-          <button
-            type="button"
-            className="enter-waiting-button"
-            disabled={disabled}
-            onClick={onEnter}
-          >
-            {familyLabel(family)} CAN ENTER NOW
-          </button>
-        ) : (
-          <div className="queue-blocked">
-            NEEDS {family.pax} · ONLY {Math.max(0, spacesLeft)} LEFT
-          </div>
-        )
-      ) : null}
-
-      <div className="waiting-actions">
-        <FamilyEditor
-          key={`${family.id}-${family.adults}-${family.children}-${family.visual}`}
-          family={family}
-          disabled={disabled}
-          onSave={onEdit}
-        />
-        <button
-          type="button"
-          className="remove-button"
-          disabled={disabled}
-          onClick={onRemove}
-        >
-          LEFT QUEUE
-        </button>
-      </div>
-    </article>
-  );
-}
-
 export default function PlayPotApp() {
   const [state, setState] = useState<PlayPotState | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -503,33 +424,6 @@ export default function PlayPotApp() {
           undo: { type: "restoreInside", id: family.id },
         });
         vibrate();
-      },
-      () => setState(before),
-    );
-  }
-
-  async function handleLeaveQueue(family: Family) {
-    if (!state) return;
-    const before = state;
-    setState({
-      ...state,
-      waiting: state.waiting.filter((item) => item.id !== family.id),
-      history: [
-        { ...family, status: "left_queue", departedAt: new Date().toISOString() },
-        ...state.history,
-      ],
-    });
-
-    await runMutation(
-      `leave-${family.id}`,
-      async () => {
-        const result = await postAction({ type: "leaveQueue", id: family.id });
-        setState(result.state);
-        setNotice({
-          tone: "success",
-          message: `${familyLabel(family)} removed from waiting`,
-          undo: { type: "restoreWaiting", id: family.id },
-        });
       },
       () => setState(before),
     );
@@ -936,68 +830,6 @@ export default function PlayPotApp() {
             )}
           </div>
         </section>
-
-        <section className="operating-section waiting-section" aria-labelledby="waiting-title">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">FIFO QUEUE</span>
-              <h2 id="waiting-title">Waiting</h2>
-            </div>
-            <span className="section-count">{state.waiting.length} FAMILIES</span>
-          </div>
-
-          <div className="waiting-list">
-            {state.waiting.length ? (
-              state.waiting.map((family, index) => (
-                <WaitingCard
-                  key={family.id}
-                  family={family}
-                  position={index + 1}
-                  isHead={index === 0}
-                  spacesLeft={state.spacesLeft}
-                  disabled={Boolean(pending)}
-                  now={now}
-                  onEnter={() => void handleEnterWaiting(family)}
-                  onRemove={() => void handleLeaveQueue(family)}
-                  onEdit={(adults, children, nextVisual) =>
-                    void handleEdit(family, adults, children, nextVisual)
-                  }
-                />
-              ))
-            ) : (
-              <div className="empty-state compact-empty">
-                <strong>NO ONE WAITING</strong>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <details className="history-section">
-          <summary>
-            <span>HISTORY</span>
-            <strong>{state.history.length} RECORDS</strong>
-          </summary>
-          <div className="history-list">
-            {state.history.length ? (
-              state.history.map((family) => (
-                <div className="history-row" key={family.id}>
-                  <strong>{familyLabel(family)}</strong>
-                  <span>
-                    {family.adults}A {family.children}C · {family.pax} PAX
-                  </span>
-                  <span>{family.visual || "No visual"}</span>
-                  <span>
-                    {family.status === "left_queue"
-                      ? `LEFT QUEUE ${formatClock(family.departedAt)}`
-                      : `${formatClock(family.enteredAt)} → ${formatClock(family.departedAt)}`}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p>No completed families in this shift.</p>
-            )}
-          </div>
-        </details>
 
         <footer className="shift-footer">
           <div>
