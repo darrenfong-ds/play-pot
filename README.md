@@ -7,18 +7,18 @@ The deployed site is an installable web app. Staff use the shared six-digit gues
 ## Operating rules
 
 - Capacity is derived only from families shown under `Inside now`.
-- A family enters only when its adult and child count fits within the 15-pax limit.
-- A family that does not fit is blocked. No family number, timer, or outside record is created.
-- The 15-minute mark changes the timer display but never checks a family out automatically.
-- Family numbers are allocated on successful entry and restart only when staff deliberately starts a new empty shift on that phone.
+- A family normally enters only when its adult and child count fits within the 15-pax limit.
+- A deliberate red overflow flow can record exactly 16 pax after a second confirmation. It can never admit 17 or more, and all further entry is blocked while the live count is over 15.
+- Each family starts with a 15-minute limit. Staff can extend or decrease that limit by one-minute steps under `Edit`; the timer never checks a family out automatically.
+- Family numbers are allocated only on successful entry and continue on that phone.
 - Adult and child counts are entered directly before admission. The visual identifier is optional.
 - Visual identifiers should be short, neutral clothing or object descriptions. Do not record names, ethnicity, nationality, ticket numbers, photos, or dates of birth.
 
 ## Phone-only memory
 
-`OUT` updates this phone's live count immediately and offers a short undo. Correcting a family count can reveal an over-capacity state, which blocks further entry until the count is corrected or somebody leaves.
+`OUT` first asks for confirmation with `No` on the left and `Yes, OUT` on the right. A confirmed OUT also offers a short undo. Correcting a family count can reveal an over-capacity state, which blocks further entry until the count is corrected or somebody leaves.
 
-Locking the app does not erase the phone's shift. Clearing browser or installed-app site data does erase that phone's Play Pot record. Use one phone for one operating record because devices do not share capacity.
+Clearing browser or installed-app site data erases that phone's Play Pot record. Use one phone for one operating record because devices do not share capacity.
 
 ## Local development
 

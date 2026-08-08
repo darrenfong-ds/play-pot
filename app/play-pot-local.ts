@@ -1,14 +1,20 @@
 export const CAPACITY = 15;
-export const PLAY_MILLISECONDS = 15 * 60_000;
+export const OVERFLOW_CAPACITY = 16;
+export const DEFAULT_TIME_LIMIT_MINUTES = 15;
+export const MAX_TIME_LIMIT_MINUTES = 120;
+export const PLAY_MILLISECONDS = DEFAULT_TIME_LIMIT_MINUTES * 60_000;
 export const UNDO_MILLISECONDS = 10_000;
-export const LOCAL_STORAGE_KEY = "play-pot.device-state.v1";
-export const LOCAL_STORAGE_BACKUP_KEY = "play-pot.device-state.v1.backup";
+export const LOCAL_STORAGE_KEY = "play-pot.device-state.v2";
+export const LOCAL_STORAGE_BACKUP_KEY = "play-pot.device-state.v2.backup";
+export const LEGACY_LOCAL_STORAGE_KEY = "play-pot.device-state.v1";
+export const LEGACY_LOCAL_STORAGE_BACKUP_KEY = "play-pot.device-state.v1.backup";
 
 export type Family = {
   id: string;
   familyNumber: number;
   adults: number;
   children: number;
+  timeLimitMinutes: number;
   visual: string;
   status: "inside" | "completed";
   createdAt: string;
@@ -17,7 +23,7 @@ export type Family = {
 };
 
 export type PlayPotState = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   revision: number;
   shift: {
     id: string;
@@ -36,6 +42,7 @@ export type PlayPotState = {
 
 type LocalStateErrorCode =
   | "invalid_count"
+  | "invalid_time_limit"
   | "capacity_exceeded"
   | "family_changed"
   | "undo_unavailable"
@@ -84,7 +91,21 @@ function normalizeVisual(value: unknown) {
   return value.trim().slice(0, 60);
 }
 
-function parseFamily(value: unknown): Family | null {
+function normalizeTimeLimit(value: unknown) {
+  if (
+    !Number.isSafeInteger(value) ||
+    Number(value) < 1 ||
+    Number(value) > MAX_TIME_LIMIT_MINUTES
+  ) {
+    throw new LocalStateError(
+      "invalid_time_limit",
+      `Use a time limit from 1 to ${MAX_TIME_LIMIT_MINUTES} minutes.`,
+    );
+  }
+  return Number(value);
+}
+
+function parseFamily(value: unknown, schemaVersion: 1 | 2): Family | null {
   if (!isRecord(value)) return null;
   if (value.status !== "inside" && value.status !== "completed") return null;
   if (typeof value.id !== "string" || !value.id.trim()) return null;
@@ -95,6 +116,16 @@ function parseFamily(value: unknown): Family | null {
     normalizeCounts(Number(value.adults), Number(value.children));
   } catch {
     return null;
+  }
+
+  let timeLimitMinutes = DEFAULT_TIME_LIMIT_MINUTES;
+  if (schemaVersion === 2 && value.timeLimitMinutes === undefined) return null;
+  if (value.timeLimitMinutes !== undefined) {
+    try {
+      timeLimitMinutes = normalizeTimeLimit(value.timeLimitMinutes);
+    } catch {
+      return null;
+    }
   }
 
   if (!validIso(value.createdAt) || !validIso(value.enteredAt)) return null;
@@ -111,6 +142,7 @@ function parseFamily(value: unknown): Family | null {
     familyNumber: value.familyNumber,
     adults: Number(value.adults),
     children: Number(value.children),
+    timeLimitMinutes,
     visual: normalizeVisual(value.visual),
     status: value.status,
     createdAt: value.createdAt as string,
@@ -125,7 +157,7 @@ export function createInitialState(
 ): PlayPotState {
   const timestamp = new Date(now).toISOString();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 0,
     shift: { id: shiftId, number: 1, startedAt: timestamp },
     nextFamilyNumber: 1,
@@ -145,7 +177,13 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
     return null;
   }
 
-  if (!isRecord(value) || value.schemaVersion !== 1) return null;
+  if (
+    !isRecord(value) ||
+    (value.schemaVersion !== 1 && value.schemaVersion !== 2)
+  ) {
+    return null;
+  }
+  const schemaVersion = value.schemaVersion;
   if (!Number.isSafeInteger(value.revision) || Number(value.revision) < 0) return null;
   if (!isRecord(value.shift)) return null;
   if (typeof value.shift.id !== "string" || !value.shift.id.trim()) return null;
@@ -153,7 +191,7 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
   if (!isSafePositiveInteger(value.nextFamilyNumber)) return null;
   if (!Array.isArray(value.families) || !validIso(value.savedAt)) return null;
 
-  const families = value.families.map(parseFamily);
+  const families = value.families.map((family) => parseFamily(family, schemaVersion));
   if (families.some((family) => family === null)) return null;
   const validFamilies = families as Family[];
   const ids = new Set(validFamilies.map((family) => family.id));
@@ -194,7 +232,7 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: Number(value.revision),
     shift: {
       id: value.shift.id,
@@ -244,7 +282,9 @@ export function spacesLeft(state: PlayPotState) {
 }
 
 export function familyDueAt(family: Family) {
-  return new Date(Date.parse(family.enteredAt) + PLAY_MILLISECONDS).toISOString();
+  return new Date(
+    Date.parse(family.enteredAt) + family.timeLimitMinutes * 60_000,
+  ).toISOString();
 }
 
 function nextRevision(state: PlayPotState) {
@@ -256,13 +296,22 @@ export function addLocalFamily(
   details: { adults: number; children: number; visual: string },
   familyId: string,
   now = Date.now(),
+  options: { allowOverflow?: boolean } = {},
 ): PlayPotState {
   const counts = normalizeCounts(details.adults, details.children);
   const pax = counts.adults + counts.children;
-  if (currentPax(state) + pax > CAPACITY) {
+  const paxBeforeEntry = currentPax(state);
+  const projectedPax = paxBeforeEntry + pax;
+  const approvedSingleOverflow =
+    options.allowOverflow === true &&
+    paxBeforeEntry <= CAPACITY &&
+    projectedPax === OVERFLOW_CAPACITY;
+  if (projectedPax > CAPACITY && !approvedSingleOverflow) {
     throw new LocalStateError(
       "capacity_exceeded",
-      `That family needs ${pax} spaces. Only ${Math.max(0, spacesLeft(state))} remain.`,
+      projectedPax === OVERFLOW_CAPACITY
+        ? `That entry would make the area ${OVERFLOW_CAPACITY} / ${CAPACITY}. Use the overflow option only if staff approves.`
+        : `That family needs ${pax} spaces. Only ${Math.max(0, spacesLeft(state))} remain.`,
     );
   }
   if (!familyId.trim() || state.families.some((family) => family.id === familyId)) {
@@ -274,6 +323,7 @@ export function addLocalFamily(
     id: familyId,
     familyNumber: state.nextFamilyNumber,
     ...counts,
+    timeLimitMinutes: DEFAULT_TIME_LIMIT_MINUTES,
     visual: normalizeVisual(details.visual),
     status: "inside",
     createdAt: timestamp,
@@ -340,10 +390,10 @@ export function restoreLocalFamily(
   ) {
     throw new LocalStateError("undo_unavailable", "That OUT action can no longer be undone.");
   }
-  if (currentPax(state) + familyPax(family) > CAPACITY) {
+  if (currentPax(state) + familyPax(family) > OVERFLOW_CAPACITY) {
     throw new LocalStateError(
       "capacity_exceeded",
-      "Undo would exceed 15 pax. Correct the live count first.",
+      `Undo would exceed ${OVERFLOW_CAPACITY} pax. Correct the live count first.`,
     );
   }
 
@@ -364,7 +414,12 @@ export function restoreLocalFamily(
 export function editLocalFamily(
   state: PlayPotState,
   familyId: string,
-  details: { adults: number; children: number; visual: string },
+  details: {
+    adults: number;
+    children: number;
+    visual: string;
+    timeLimitMinutes?: number;
+  },
   now = Date.now(),
 ): PlayPotState {
   const family = state.families.find(
@@ -374,13 +429,23 @@ export function editLocalFamily(
     throw new LocalStateError("family_changed", "That family is no longer inside.");
   }
   const counts = normalizeCounts(details.adults, details.children);
+  const timeLimitMinutes = normalizeTimeLimit(
+    details.timeLimitMinutes === undefined
+      ? family.timeLimitMinutes
+      : details.timeLimitMinutes,
+  );
   const timestamp = new Date(now).toISOString();
   return {
     ...state,
     revision: nextRevision(state),
     families: state.families.map((candidate) =>
       candidate.id === familyId
-        ? { ...candidate, ...counts, visual: normalizeVisual(details.visual) }
+        ? {
+            ...candidate,
+            ...counts,
+            timeLimitMinutes,
+            visual: normalizeVisual(details.visual),
+          }
         : candidate,
     ),
     undo: null,
@@ -401,7 +466,7 @@ export function startLocalShift(
   }
   const timestamp = new Date(now).toISOString();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: nextRevision(state),
     shift: {
       id: shiftId,

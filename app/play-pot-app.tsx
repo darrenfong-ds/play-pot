@@ -6,18 +6,22 @@ import {
   CAPACITY,
   createInitialState,
   currentPax,
+  DEFAULT_TIME_LIMIT_MINUTES,
   editLocalFamily,
   familyDueAt,
   familyPax,
   insideFamilies,
+  LEGACY_LOCAL_STORAGE_BACKUP_KEY,
+  LEGACY_LOCAL_STORAGE_KEY,
   LOCAL_STORAGE_BACKUP_KEY,
   LOCAL_STORAGE_KEY,
+  MAX_TIME_LIMIT_MINUTES,
   markLocalFamilyOut,
+  OVERFLOW_CAPACITY,
   readLocalState,
   restoreLocalFamily,
   serializeLocalState,
   spacesLeft,
-  startLocalShift,
   type Family,
   type PlayPotState,
 } from "./play-pot-local";
@@ -66,7 +70,7 @@ function timerState(family: Family, now: number) {
 
   const minutesOver = Math.floor((now - dueAt) / 60_000);
   if (minutesOver < 1) {
-    return { label: "15 MIN REACHED", overdue: true };
+    return { label: `${family.timeLimitMinutes} MIN REACHED`, overdue: true };
   }
   return { label: `+${minutesOver} MIN OVER`, overdue: true };
 }
@@ -114,16 +118,22 @@ function FamilyEditor({
   disabled,
 }: {
   family: Family;
-  onSave: (adults: number, children: number, visual: string) => void;
+  onSave: (
+    adults: number,
+    children: number,
+    visual: string,
+    timeLimitMinutes: number,
+  ) => void;
   disabled: boolean;
 }) {
   const [adults, setAdults] = useState(family.adults);
   const [children, setChildren] = useState(family.children);
   const [visual, setVisual] = useState(family.visual);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(family.timeLimitMinutes);
 
   return (
     <details className="family-editor">
-      <summary>{family.visual ? "Correct details" : "Add visual / correct count"}</summary>
+      <summary>Edit</summary>
       <div className="editor-body">
         <div className="editor-steppers">
           <Stepper
@@ -150,13 +160,40 @@ function FamilyEditor({
           onChange={(event) => setVisual(event.target.value)}
           placeholder="e.g. blue stroller"
         />
+        <div
+          className="time-limit-editor"
+          aria-label={`Time limit: ${timeLimitMinutes} minutes`}
+        >
+          <span>Time limit</span>
+          <button
+            type="button"
+            aria-label="Decrease time limit by 1 minute"
+            disabled={timeLimitMinutes <= 1}
+            onClick={() => setTimeLimitMinutes((minutes) => Math.max(1, minutes - 1))}
+          >
+            -
+          </button>
+          <strong>{timeLimitMinutes} MIN</strong>
+          <button
+            type="button"
+            aria-label="Extend time limit by 1 minute"
+            disabled={timeLimitMinutes >= MAX_TIME_LIMIT_MINUTES}
+            onClick={() =>
+              setTimeLimitMinutes((minutes) =>
+                Math.min(MAX_TIME_LIMIT_MINUTES, minutes + 1),
+              )
+            }
+          >
+            +
+          </button>
+        </div>
         <button
           className="save-correction"
           type="button"
           disabled={disabled}
-          onClick={() => onSave(adults, children, visual)}
+          onClick={() => onSave(adults, children, visual, timeLimitMinutes)}
         >
-          SAVE {adults + children} PAX
+          SAVE CHANGES
         </button>
       </div>
     </details>
@@ -174,7 +211,12 @@ function ActiveFamilyCard({
   now: number;
   disabled: boolean;
   onOut: () => void;
-  onEdit: (adults: number, children: number, visual: string) => void;
+  onEdit: (
+    adults: number,
+    children: number,
+    visual: string,
+    timeLimitMinutes: number,
+  ) => void;
 }) {
   const timer = timerState(family, now);
 
@@ -195,7 +237,9 @@ function ActiveFamilyCard({
       <div className="family-times">
         <span>IN {formatClock(family.enteredAt)}</span>
         <span aria-hidden="true">/</span>
-        <span>15 MIN {formatClock(familyDueAt(family))}</span>
+        <span>
+          {family.timeLimitMinutes} MIN {formatClock(familyDueAt(family))}
+        </span>
       </div>
 
       <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
@@ -204,7 +248,7 @@ function ActiveFamilyCard({
 
       <div className="family-actions">
         <FamilyEditor
-          key={`${family.id}-${family.adults}-${family.children}-${family.visual}`}
+          key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
           family={family}
           disabled={disabled}
           onSave={onEdit}
@@ -238,6 +282,10 @@ export default function PlayPotApp() {
   const [visual, setVisual] = useState("");
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [outCandidate, setOutCandidate] = useState<Family | null>(null);
+  const [confirmOverflow, setConfirmOverflow] = useState(false);
+  const cancelConfirmationRef = useRef<HTMLButtonElement | null>(null);
+  const confirmationHandledRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [installHelp, setInstallHelp] = useState("");
   const [isInstalled, setIsInstalled] = useState(false);
@@ -252,15 +300,17 @@ export default function PlayPotApp() {
     const previous = stateRef.current;
     let saved = true;
     try {
+      const serialized = serializeLocalState(next);
+      if (!readLocalState(serialized, now)) {
+        throw new Error("The updated phone record could not be verified.");
+      }
       if (previous) {
         window.localStorage.setItem(
           LOCAL_STORAGE_BACKUP_KEY,
           serializeLocalState(previous),
         );
       }
-      const serialized = serializeLocalState(next);
       window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
-      window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
       setUnsaved(false);
     } catch {
       saved = false;
@@ -273,16 +323,29 @@ export default function PlayPotApp() {
   function openThisPhoneState() {
     const currentRaw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
     const backupRaw = window.localStorage.getItem(LOCAL_STORAGE_BACKUP_KEY);
+    const hasCurrentVersion = currentRaw !== null || backupRaw !== null;
     let next = readLocalState(currentRaw);
     let recovered = false;
+    let migrated = false;
 
     if (!next && backupRaw !== null) {
       next = readLocalState(backupRaw);
       recovered = Boolean(next);
     }
 
-    if (!next && currentRaw === null && backupRaw === null) {
-      next = createInitialState(now, crypto.randomUUID());
+    if (!next && !hasCurrentVersion) {
+      const legacyRaw = window.localStorage.getItem(LEGACY_LOCAL_STORAGE_KEY);
+      const legacyBackupRaw = window.localStorage.getItem(
+        LEGACY_LOCAL_STORAGE_BACKUP_KEY,
+      );
+      const hasLegacyVersion = legacyRaw !== null || legacyBackupRaw !== null;
+      next = readLocalState(legacyRaw);
+      if (!next && legacyBackupRaw !== null) {
+        next = readLocalState(legacyBackupRaw);
+        recovered = Boolean(next);
+      }
+      if (next) migrated = true;
+      else if (!hasLegacyVersion) next = createInitialState(now, crypto.randomUUID());
     }
 
     if (!next) {
@@ -305,6 +368,8 @@ export default function PlayPotApp() {
     }
     if (recovered) {
       setNotice({ tone: "info", message: "Recovered this phone's last valid record." });
+    } else if (migrated) {
+      setNotice({ tone: "info", message: "This phone's saved timers were updated safely." });
     }
   }
 
@@ -391,6 +456,25 @@ export default function PlayPotApp() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
+  useEffect(() => {
+    if (!outCandidate && !confirmOverflow) return;
+    confirmationHandledRef.current = false;
+    const cancelConfirmation = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOutCandidate(null);
+      setConfirmOverflow(false);
+    };
+    const focusCancelButton = window.setTimeout(
+      () => cancelConfirmationRef.current?.focus(),
+      0,
+    );
+    document.addEventListener("keydown", cancelConfirmation);
+    return () => {
+      window.clearTimeout(focusCancelButton);
+      document.removeEventListener("keydown", cancelConfirmation);
+    };
+  }, [outCandidate, confirmOverflow]);
+
   function vibrate() {
     if ("vibrate" in navigator) navigator.vibrate(20);
   }
@@ -446,25 +530,7 @@ export default function PlayPotApp() {
     else setInstallHelp(guidance);
   }
 
-  async function handleLock() {
-    if (pending) return;
-    setPending("lock");
-    try {
-      const response = await fetch("/api/guest", { method: "DELETE" });
-      if (!response.ok) throw new Error("Could not lock Play Pot.");
-      stateRef.current = null;
-      setState(null);
-      setAuthState("locked");
-      setNotice(null);
-      setGuestPin("");
-    } catch (error) {
-      reportActionError(error);
-    } finally {
-      setPending("");
-    }
-  }
-
-  function handleAdd() {
+  function handleAdd(allowOverflow = false) {
     const current = stateRef.current;
     if (!current) return;
     try {
@@ -473,6 +539,7 @@ export default function PlayPotApp() {
         { adults: customAdults, children: customChildren, visual },
         crypto.randomUUID(),
         now,
+        { allowOverflow },
       );
       const added = insideFamilies(next).find(
         (family) => family.familyNumber === current.nextFamilyNumber,
@@ -480,7 +547,7 @@ export default function PlayPotApp() {
       commitState(next);
       setNotice({
         tone: "success",
-        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / 15-min timer started`,
+        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`,
       });
       setCustomAdults(1);
       setCustomChildren(1);
@@ -495,12 +562,16 @@ export default function PlayPotApp() {
     const current = stateRef.current;
     if (!current) return;
     try {
-      const next = markLocalFamilyOut(current, family.id, now);
+      const liveFamily = insideFamilies(current).find(
+        (candidate) => candidate.id === family.id,
+      );
+      if (!liveFamily) throw new Error("That family is no longer inside.");
+      const next = markLocalFamilyOut(current, liveFamily.id, now);
       commitState(next);
       setNotice({
         tone: "success",
-        message: `${familyLabel(family)} OUT / ${familyPax(family)} spaces freed`,
-        undo: { id: family.id },
+        message: `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`,
+        undo: { id: liveFamily.id },
       });
       vibrate();
     } catch (error) {
@@ -513,6 +584,7 @@ export default function PlayPotApp() {
     adults: number,
     children: number,
     nextVisual: string,
+    timeLimitMinutes: number,
   ) {
     const current = stateRef.current;
     if (!current) return;
@@ -520,13 +592,13 @@ export default function PlayPotApp() {
       const next = editLocalFamily(
         current,
         family.id,
-        { adults, children, visual: nextVisual },
+        { adults, children, visual: nextVisual, timeLimitMinutes },
         now,
       );
       commitState(next);
       setNotice({
         tone: "success",
-        message: `${familyLabel(family)} updated / ${adults + children} pax`,
+        message: `${familyLabel(family)} updated / ${adults + children} pax / ${timeLimitMinutes} min`,
       });
     } catch (error) {
       reportActionError(error);
@@ -541,25 +613,6 @@ export default function PlayPotApp() {
       commitState(next);
       setNotice({ tone: "success", message: "Last OUT action undone" });
       vibrate();
-    } catch (error) {
-      reportActionError(error);
-    }
-  }
-
-  function handleNewShift() {
-    const current = stateRef.current;
-    if (!current || insideFamilies(current).length) return;
-    if (
-      !window.confirm(
-        "Start a new shift on this phone? Completed records will clear and family numbers restart at F1.",
-      )
-    ) {
-      return;
-    }
-    try {
-      const next = startLocalShift(current, crypto.randomUUID(), now);
-      commitState(next);
-      setNotice({ tone: "success", message: "New shift started / next family is F1" });
     } catch (error) {
       reportActionError(error);
     }
@@ -663,6 +716,9 @@ export default function PlayPotApp() {
   const remaining = spacesLeft(state);
   const selectedPax = customAdults + customChildren;
   const fits = paxInside <= CAPACITY && selectedPax <= remaining;
+  const projectedPax = paxInside + selectedPax;
+  const canOverflow =
+    paxInside <= CAPACITY && projectedPax === OVERFLOW_CAPACITY;
   const overCapacityBy = Math.max(0, paxInside - CAPACITY);
   const busy = Boolean(pending);
 
@@ -687,7 +743,7 @@ export default function PlayPotApp() {
 
         {overCapacityBy ? (
           <div className="over-capacity-alert" role="alert">
-            OVER CAPACITY BY {overCapacityBy} / STOP ENTRY
+            OVER LIMIT BY {overCapacityBy} / NO MORE ENTRY
           </div>
         ) : null}
         {unsaved ? (
@@ -735,11 +791,20 @@ export default function PlayPotApp() {
               />
             </div>
 
-            <div className={`admission-result ${fits ? "result-fit" : "result-block"}`}>
+            <div
+              className={`admission-result ${
+                fits ? "result-fit" : canOverflow ? "result-overflow" : "result-block"
+              }`}
+            >
               {fits ? (
                 <>
                   <strong>{selectedPax} PAX FITS</strong>
                   <span>{remaining - selectedPax} spaces remain after entry</span>
+                </>
+              ) : canOverflow ? (
+                <>
+                  <strong>OVERFLOW OPTION / {OVERFLOW_CAPACITY} OF {CAPACITY}</strong>
+                  <span>Area will be 1 over the limit / no more entry after this</span>
                 </>
               ) : (
                 <>
@@ -753,15 +818,22 @@ export default function PlayPotApp() {
 
             <button
               type="button"
-              className="commit-family-button"
-              disabled={busy || !fits}
-              onClick={handleAdd}
+              className={`commit-family-button ${canOverflow ? "commit-overflow" : ""}`}
+              disabled={busy || (!fits && !canOverflow)}
+              onClick={() => {
+                if (canOverflow) {
+                  confirmationHandledRef.current = false;
+                  setConfirmOverflow(true);
+                } else handleAdd();
+              }}
             >
               {fits
                 ? `ENTER FAMILY / ${selectedPax} PAX`
-                : remaining <= 0
-                  ? "FULL / STOP ENTRY"
-                  : `CANNOT ENTER / ${selectedPax} PAX`}
+                : canOverflow
+                  ? `OVERFLOW / RECORD ${OVERFLOW_CAPACITY} OF ${CAPACITY}`
+                  : remaining <= 0
+                    ? "FULL / STOP ENTRY"
+                    : `CANNOT ENTER / ${selectedPax} PAX`}
             </button>
           </div>
         </section>
@@ -780,9 +852,18 @@ export default function PlayPotApp() {
                   family={family}
                   now={now}
                   disabled={busy}
-                  onOut={() => handleOut(family)}
-                  onEdit={(adults, children, nextVisual) =>
-                    handleEdit(family, adults, children, nextVisual)
+                  onOut={() => {
+                    confirmationHandledRef.current = false;
+                    setOutCandidate(family);
+                  }}
+                  onEdit={(adults, children, nextVisual, timeLimitMinutes) =>
+                    handleEdit(
+                      family,
+                      adults,
+                      children,
+                      nextVisual,
+                      timeLimitMinutes,
+                    )
                   }
                 />
               ))
@@ -794,31 +875,90 @@ export default function PlayPotApp() {
             )}
           </div>
         </section>
-
-        <footer className="shift-footer">
-          <div>
-            <strong>SHIFT {state.shift.number} / THIS PHONE ONLY</strong>
-            <span>Started {formatClock(state.shift.startedAt)} / not shared</span>
-          </div>
-          <div className="shift-footer-actions">
-            {!isInstalled ? (
-              <button type="button" onClick={() => void handleInstall()}>
-                INSTALL APP
-              </button>
-            ) : null}
-            <button type="button" disabled={busy} onClick={() => void handleLock()}>
-              LOCK
-            </button>
-            <button
-              type="button"
-              disabled={busy || activeFamilies.length > 0}
-              onClick={handleNewShift}
-            >
-              NEW SHIFT
-            </button>
-          </div>
-        </footer>
       </div>
+
+      {outCandidate ? (
+        <div className="confirm-overlay">
+          <section
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-out-title"
+            aria-describedby="confirm-out-copy"
+          >
+            <h2 id="confirm-out-title">{familyLabel(outCandidate)} OUT?</h2>
+            <p id="confirm-out-copy">
+              {outCandidate.visual || `${outCandidate.adults}A ${outCandidate.children}C`} /
+              remove {familyPax(outCandidate)} pax from Inside now.
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={() => setOutCandidate(null)}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  const family = outCandidate;
+                  setOutCandidate(null);
+                  handleOut(family);
+                }}
+              >
+                YES, OUT
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {confirmOverflow ? (
+        <div className="confirm-overlay">
+          <section
+            className="confirm-dialog confirm-dialog-overflow"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-overflow-title"
+            aria-describedby="confirm-overflow-copy"
+          >
+            <h2 id="confirm-overflow-title">
+              OVERFLOW TO {OVERFLOW_CAPACITY} / {CAPACITY}?
+            </h2>
+            <p id="confirm-overflow-copy">
+              This records {selectedPax} pax entering. The area will be 1 over the
+              limit and all further entry will stop.
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={() => setConfirmOverflow(false)}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  setConfirmOverflow(false);
+                  handleAdd(true);
+                }}
+              >
+                YES, ALLOW
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {notice ? (
         <div className={`toast toast-${notice.tone}`} role="status" aria-live="polite">
