@@ -117,7 +117,10 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /Recently OUT/);
   assert.match(client, /RESTORE/);
   assert.match(client, /YES, DELETE/);
+  assert.match(client, /DELETE ALL ENTRIES/);
+  assert.match(client, /YES, DELETE ALL/);
   assert.match(client, /deleteRecentLocalFamily/);
+  assert.match(client, /deleteAllRecentLocalFamilies/);
   assert.match(client, /ENTRY_LOCK_MILLISECONDS = 700/);
   assert.match(client, /ACTION_NOTICE_MILLISECONDS = 1_000/);
   assert.equal(
@@ -163,6 +166,10 @@ test("keeps all operational data on one device", async () => {
     client,
     /confirm-delete-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE\s*</,
   );
+  assert.match(
+    client,
+    /confirm-delete-all-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE ALL\s*</,
+  );
   assert.match(client, /YES, ENTER/);
   assert.match(client, /ENTER ABOVE \{CAPACITY\}\?/);
   assert.doesNotMatch(client, />\s*INSTALL APP\s*</);
@@ -177,6 +184,7 @@ test("keeps all operational data on one device", async () => {
   assert.match(localCore, /purgeExpiredCompletedFamilies/);
   assert.match(localCore, /restoreRecentLocalFamily/);
   assert.match(localCore, /deleteRecentLocalFamily/);
+  assert.match(localCore, /deleteAllRecentLocalFamilies/);
   assert.match(localCore, /play-pot\.device-state\.v2/);
   assert.match(client, /LEGACY_LOCAL_STORAGE_KEY/);
   assert.match(client, /purgeExpiredCompletedFamilies\(previous, savedAt\)/);
@@ -726,6 +734,144 @@ test("manually deletes only an available Recently OUT record without reusing its
     );
     assert.equal(core.serializeLocalState(unavailable.state), beforeAttempt);
   }
+});
+
+test("continues numbering while records remain and restarts only when fully empty", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:25:00.000Z");
+  let state = core.addLocalFamily(
+    core.createInitialState(start, "number-reset-shift"),
+    { adults: 1, children: 1, visual: "red backpack" },
+    "first-family",
+    start,
+  );
+  state = core.markLocalFamilyOut(state, "first-family", start + 1_000);
+
+  const continued = core.addLocalFamily(
+    state,
+    { adults: 1, children: 2, visual: "blue stroller" },
+    "second-family",
+    start + 2_000,
+  );
+  assert.equal(core.insideFamilies(state).length, 0);
+  assert.equal(
+    continued.families.find((family) => family.id === "second-family")
+      .familyNumber,
+    2,
+  );
+
+  const allOut = core.markLocalFamilyOut(
+    continued,
+    "second-family",
+    start + 3_000,
+  );
+  const deletedAt = start + 4_000;
+  const deletedAll = core.deleteAllRecentLocalFamilies(allOut, deletedAt);
+  assert.deepEqual(deletedAll.families, []);
+  assert.equal(deletedAll.nextFamilyNumber, 1);
+  assert.equal(deletedAll.undo, null);
+  assert.equal(deletedAll.revision, allOut.revision + 1);
+  assert.equal(deletedAll.savedAt, new Date(deletedAt).toISOString());
+  assert.doesNotMatch(
+    core.serializeLocalState(deletedAll),
+    /first-family|second-family|red backpack|blue stroller/,
+  );
+
+  const restarted = core.addLocalFamily(
+    deletedAll,
+    { adults: 1, children: 1, visual: "green cap" },
+    "restarted-family",
+    start + 5_000,
+  );
+  assert.equal(
+    restarted.families.find((family) => family.id === "restarted-family")
+      .familyNumber,
+    1,
+  );
+  assert.equal(restarted.nextFamilyNumber, 2);
+
+  const oldEmptyRecord = JSON.parse(core.serializeLocalState(deletedAll));
+  oldEmptyRecord.nextFamilyNumber = 20;
+  assert.equal(
+    core.readLocalState(JSON.stringify(oldEmptyRecord), start + 5_000)
+      .nextFamilyNumber,
+    1,
+  );
+  assert.equal(
+    core.addLocalFamily(
+      { ...deletedAll, nextFamilyNumber: 20 },
+      { adults: 1, children: 1, visual: "legacy empty state" },
+      "legacy-restart",
+      start + 6_000,
+    ).families[0].familyNumber,
+    1,
+  );
+});
+
+test("deletes all recent OUT records while preserving active families and sequence", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:27:00.000Z");
+  let state = core.addLocalFamily(
+    core.createInitialState(start, "partial-delete-all-shift"),
+    { adults: 1, children: 1, visual: "orange bag" },
+    "recent-family",
+    start,
+  );
+  state = core.addLocalFamily(
+    state,
+    { adults: 2, children: 1, visual: "purple top" },
+    "active-family",
+    start + 1_000,
+  );
+  state = core.markLocalFamilyOut(state, "recent-family", start + 2_000);
+  const originalNextFamilyNumber = state.nextFamilyNumber;
+  const activeFamily = state.families.find(
+    (family) => family.id === "active-family",
+  );
+
+  const deletedAll = core.deleteAllRecentLocalFamilies(state, start + 3_000);
+  assert.deepEqual(deletedAll.families, [activeFamily]);
+  assert.equal(deletedAll.nextFamilyNumber, originalNextFamilyNumber);
+  assert.equal(core.currentPax(deletedAll), 3);
+  assert.equal(deletedAll.undo, null);
+  assert.doesNotMatch(
+    core.serializeLocalState(deletedAll),
+    /recent-family|orange bag/,
+  );
+
+  const beforeUnavailableDelete = core.serializeLocalState(deletedAll);
+  assert.throws(
+    () => core.deleteAllRecentLocalFamilies(deletedAll, start + 4_000),
+    (error) =>
+      error.code === "delete_unavailable" &&
+      /no recent OUT records to delete/i.test(error.message),
+  );
+  assert.equal(core.serializeLocalState(deletedAll), beforeUnavailableDelete);
+});
+
+test("resets numbering when the final recent OUT record expires or is deleted", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:28:00.000Z");
+  const inside = core.addLocalFamily(
+    core.createInitialState(start, "final-record-shift"),
+    { adults: 1, children: 1, visual: "yellow shoes" },
+    "final-family",
+    start,
+  );
+  const outAt = start + 1_000;
+  const allOut = core.markLocalFamilyOut(inside, "final-family", outAt);
+
+  const deleted = core.deleteRecentLocalFamily(allOut, "final-family", outAt + 1);
+  assert.deepEqual(deleted.families, []);
+  assert.equal(deleted.nextFamilyNumber, 1);
+
+  const expired = core.purgeExpiredCompletedFamilies(
+    allOut,
+    outAt + core.RECENT_OUT_MILLISECONDS,
+  );
+  assert.deepEqual(expired.families, []);
+  assert.equal(expired.nextFamilyNumber, 1);
+  assert.equal(expired.undo, null);
 });
 
 test("restores a recent factual OUT after quick undo expires, even above 20", async () => {

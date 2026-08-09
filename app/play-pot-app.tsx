@@ -7,6 +7,7 @@ import {
   createInitialState,
   currentPax,
   DEFAULT_TIME_LIMIT_MINUTES,
+  deleteAllRecentLocalFamilies,
   deleteRecentLocalFamily,
   editLocalFamily,
   familyDueAt,
@@ -343,6 +344,7 @@ export default function PlayPotApp() {
   const [confirmFlex, setConfirmFlex] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<Family | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Family | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
   const [entryLocked, setEntryLocked] = useState(false);
   const [entryRecorded, setEntryRecorded] = useState(false);
@@ -581,6 +583,7 @@ export default function PlayPotApp() {
       !confirmFlex &&
       !restoreCandidate &&
       !deleteCandidate &&
+      !confirmDeleteAll &&
       !editCandidate
     ) {
       return;
@@ -592,6 +595,7 @@ export default function PlayPotApp() {
         setConfirmFlex(false);
         setRestoreCandidate(null);
         setDeleteCandidate(null);
+        setConfirmDeleteAll(false);
         setEditCandidate(null);
         const returnTarget = confirmationReturnFocusRef.current;
         confirmationReturnFocusRef.current = null;
@@ -624,13 +628,21 @@ export default function PlayPotApp() {
       window.clearTimeout(focusCancelButton);
       document.removeEventListener("keydown", handleConfirmationKeydown);
     };
-  }, [outCandidate, confirmFlex, restoreCandidate, deleteCandidate, editCandidate]);
+  }, [
+    outCandidate,
+    confirmFlex,
+    restoreCandidate,
+    deleteCandidate,
+    confirmDeleteAll,
+    editCandidate,
+  ]);
 
   function cancelOpenConfirmation() {
     setOutCandidate(null);
     setConfirmFlex(false);
     setRestoreCandidate(null);
     setDeleteCandidate(null);
+    setConfirmDeleteAll(false);
     setEditCandidate(null);
     const returnTarget = confirmationReturnFocusRef.current;
     confirmationReturnFocusRef.current = null;
@@ -857,6 +869,24 @@ export default function PlayPotApp() {
         message: saved
           ? `${familyLabel(family)} OUT record permanently deleted from this phone`
           : "The record could not be deleted from phone storage. Try again.",
+      });
+      if (saved) vibrate();
+    } catch (error) {
+      reportActionError(error);
+    }
+  }
+
+  function handleDeleteAllRecent() {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = deleteAllRecentLocalFamilies(current, Date.now());
+      const saved = commitState(next, { mirrorToBackup: true });
+      setNotice({
+        tone: saved ? "success" : "error",
+        message: saved
+          ? "All Recently OUT records permanently deleted from this phone"
+          : "The records could not be deleted from phone storage. Try again.",
       });
       if (saved) vibrate();
     } catch (error) {
@@ -1177,6 +1207,18 @@ export default function PlayPotApp() {
                     </article>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  className="delete-all-recent-button"
+                  disabled={busy}
+                  onClick={(event) => {
+                    confirmationReturnFocusRef.current = event.currentTarget;
+                    confirmationHandledRef.current = false;
+                    setConfirmDeleteAll(true);
+                  }}
+                >
+                  DELETE ALL ENTRIES
+                </button>
               </details>
             </section>
           ) : null}
@@ -1397,6 +1439,49 @@ export default function PlayPotApp() {
                 }}
               >
                 YES, DELETE
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {confirmDeleteAll ? (
+        <div className="confirm-overlay">
+          <section
+            ref={confirmationDialogRef}
+            className="confirm-dialog confirm-dialog-delete"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-delete-all-title"
+            aria-describedby="confirm-delete-all-copy"
+          >
+            <h2 id="confirm-delete-all-title">DELETE ALL RECENTLY OUT?</h2>
+            <p id="confirm-delete-all-copy">
+              This permanently deletes all {recentlyOut.length} Recently OUT
+              {recentlyOut.length === 1 ? " record" : " records"} from this
+              phone. This cannot be undone.
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={cancelOpenConfirmation}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  setConfirmDeleteAll(false);
+                  confirmationReturnFocusRef.current = null;
+                  handleDeleteAllRecent();
+                }}
+              >
+                YES, DELETE ALL
               </button>
             </div>
           </section>

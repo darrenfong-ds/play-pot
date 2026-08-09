@@ -214,11 +214,14 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
       family.status === "inside" || familyIsWithinRecentOutWindow(family, now),
   );
 
-  const highestFamilyNumber = validFamilies.reduce(
+  const highestFamilyNumber = retainedFamilies.reduce(
     (highest, family) => Math.max(highest, family.familyNumber),
     0,
   );
-  const nextFamilyNumber = Math.max(Number(value.nextFamilyNumber), highestFamilyNumber + 1);
+  const nextFamilyNumber =
+    retainedFamilies.length === 0
+      ? 1
+      : Math.max(Number(value.nextFamilyNumber), highestFamilyNumber + 1);
 
   let undo: PlayPotState["undo"] = null;
   if (value.undo !== null) {
@@ -313,6 +316,7 @@ export function purgeExpiredCompletedFamilies(
   return {
     ...state,
     families,
+    nextFamilyNumber: families.length === 0 ? 1 : state.nextFamilyNumber,
     undo:
       state.undo && retainedIds.has(state.undo.familyId) ? state.undo : null,
     savedAt: new Date(now).toISOString(),
@@ -386,9 +390,11 @@ export function addLocalFamily(
   }
 
   const timestamp = new Date(now).toISOString();
+  const familyNumber =
+    currentState.families.length === 0 ? 1 : currentState.nextFamilyNumber;
   const family: Family = {
     id: familyId,
-    familyNumber: currentState.nextFamilyNumber,
+    familyNumber,
     ...counts,
     timeLimitMinutes: DEFAULT_TIME_LIMIT_MINUTES,
     visual: normalizeVisual(details.visual),
@@ -401,7 +407,7 @@ export function addLocalFamily(
   return {
     ...currentState,
     revision: nextRevision(currentState),
-    nextFamilyNumber: currentState.nextFamilyNumber + 1,
+    nextFamilyNumber: familyNumber + 1,
     families: [...currentState.families, family],
     undo: null,
     savedAt: timestamp,
@@ -521,12 +527,14 @@ export function deleteRecentLocalFamily(
 
   const timestamp = new Date(now).toISOString();
   const revision = nextRevision(currentState);
+  const families = currentState.families.filter(
+    (candidate) => candidate.id !== familyId,
+  );
   return {
     ...currentState,
     revision,
-    families: currentState.families.filter(
-      (candidate) => candidate.id !== familyId,
-    ),
+    families,
+    nextFamilyNumber: families.length === 0 ? 1 : currentState.nextFamilyNumber,
     undo:
       currentState.undo &&
       currentState.undo.familyId !== familyId &&
@@ -534,6 +542,35 @@ export function deleteRecentLocalFamily(
         ? { ...currentState.undo, afterRevision: revision }
         : null,
     savedAt: timestamp,
+  };
+}
+
+export function deleteAllRecentLocalFamilies(
+  state: PlayPotState,
+  now = Date.now(),
+): PlayPotState {
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const hasRecentOut = currentState.families.some(
+    (family) =>
+      family.status === "completed" && familyIsWithinRecentOutWindow(family, now),
+  );
+  if (!hasRecentOut) {
+    throw new LocalStateError(
+      "delete_unavailable",
+      "There are no recent OUT records to delete.",
+    );
+  }
+
+  const families = currentState.families.filter(
+    (family) => family.status === "inside",
+  );
+  return {
+    ...currentState,
+    revision: nextRevision(currentState),
+    nextFamilyNumber: families.length === 0 ? 1 : currentState.nextFamilyNumber,
+    families,
+    undo: null,
+    savedAt: new Date(now).toISOString(),
   };
 }
 

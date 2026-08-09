@@ -802,6 +802,19 @@ input::placeholder {
   color: var(--coral-dark);
 }
 
+.delete-all-recent-button {
+  width: calc(100% - 1.5rem);
+  min-height: 48px;
+  margin: 0 0.75rem 0.75rem;
+  border: 1px solid var(--coral);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--coral-dark);
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.035em;
+}
+
 .guest-screen {
   min-height: 100vh;
   min-height: 100svh;
