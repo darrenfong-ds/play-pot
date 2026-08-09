@@ -72,6 +72,12 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /window\.localStorage/);
   assert.match(client, /LOCAL_STORAGE_KEY/);
   assert.match(client, /THIS PHONE \/ LIVE/);
+  assert.match(client, /PIN\s*<strong>000000<\/strong>/);
+  assert.match(client, /pending === "unlock" \? "ENTERING\.\.\." : "ENTER"/);
+  assert.doesNotMatch(
+    client,
+    /OPEN PLAY POT|INSTALL ON THIS PHONE|install-app-button|handleInstall|beforeinstallprompt/,
+  );
   assert.match(client, /CANNOT ENTER \/ MAX/);
   assert.match(client, /className="out-button"/);
   assert.match(
@@ -176,7 +182,7 @@ test("keeps all operational data on one device", async () => {
   assert.match(guestAuth, /__Host-play_pot_session/);
   assert.match(guestSessionCore, /crypto\.subtle\.sign/);
   assert.match(guestRoute, /export async function DELETE/);
-  assert.doesNotMatch(`${guestRoute}\n${guestAuth}\n${guestSessionCore}\n${client}`, /000000/);
+  assert.doesNotMatch(`${guestRoute}\n${guestAuth}\n${guestSessionCore}`, /000000/);
 
   const hostingConfig = JSON.parse(hosting);
   assert.equal(hostingConfig.d1, null);

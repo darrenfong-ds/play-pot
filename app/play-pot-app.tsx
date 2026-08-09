@@ -56,11 +56,6 @@ type EditCandidate = {
   timeLimitMinutes: number;
 };
 
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
 const sgTime = new Intl.DateTimeFormat("en-SG", {
   hour: "numeric",
   minute: "2-digit",
@@ -386,10 +381,6 @@ export default function PlayPotApp() {
   const confirmationDialogRef = useRef<HTMLElement | null>(null);
   const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const confirmationHandledRef = useRef(false);
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const [installHelp, setInstallHelp] = useState("");
-  const [isInstalled, setIsInstalled] = useState(false);
-
   function showState(next: PlayPotState) {
     stateRef.current = next;
     setState(next);
@@ -624,34 +615,9 @@ export default function PlayPotApp() {
   }, [state]);
 
   useEffect(() => {
-    const rememberInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    };
-    const markInstalled = () => {
-      setIsInstalled(true);
-      setInstallPrompt(null);
-      setInstallHelp("");
-    };
-    const detectInstalled = window.setTimeout(() => {
-      const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
-      setIsInstalled(
-        window.matchMedia("(display-mode: standalone)").matches ||
-          navigatorWithStandalone.standalone === true,
-      );
-    }, 0);
-
-    window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
-    window.addEventListener("appinstalled", markInstalled);
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
-
-    return () => {
-      window.clearTimeout(detectInstalled);
-      window.removeEventListener("beforeinstallprompt", rememberInstallPrompt);
-      window.removeEventListener("appinstalled", markInstalled);
-    };
   }, []);
 
   useEffect(() => {
@@ -765,24 +731,6 @@ export default function PlayPotApp() {
     } finally {
       setPending("");
     }
-  }
-
-  async function handleInstall() {
-    if (installPrompt) {
-      await installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      setInstallPrompt(null);
-      if (choice.outcome === "accepted") {
-        setIsInstalled(true);
-        setInstallHelp("");
-      }
-      return;
-    }
-
-    const guidance =
-      "iPhone: Share > Add to Home Screen. Android: browser menu > Install app.";
-    if (state) setNotice({ tone: "info", message: guidance });
-    else setInstallHelp(guidance);
   }
 
   function handleAdd(allowFlex = false) {
@@ -1002,6 +950,9 @@ export default function PlayPotApp() {
           <span className="guest-kicker">STAFF GUEST ACCESS</span>
           <h1 id="guest-title">PLAY POT</h1>
           <p>Enter the staff PIN to open Play Pot on this phone.</p>
+          <p id="guest-pin-hint" className="guest-pin-hint">
+            PIN <strong>000000</strong>
+          </p>
 
           <form className="guest-form" onSubmit={(event) => void handleGuestUnlock(event)}>
             <label htmlFor="guest-pin">Guest PIN</label>
@@ -1017,7 +968,9 @@ export default function PlayPotApp() {
               onChange={(event) =>
                 setGuestPin(event.target.value.replace(/\D/g, "").slice(0, 6))
               }
-              aria-describedby={unlockError ? "guest-error" : undefined}
+              aria-describedby={
+                unlockError ? "guest-pin-hint guest-error" : "guest-pin-hint"
+              }
             />
             {unlockError ? (
               <p id="guest-error" className="guest-error" role="alert">
@@ -1025,16 +978,9 @@ export default function PlayPotApp() {
               </p>
             ) : null}
             <button type="submit" disabled={guestPin.length !== 6 || pending === "unlock"}>
-              {pending === "unlock" ? "OPENING..." : "OPEN PLAY POT"}
+              {pending === "unlock" ? "ENTERING..." : "ENTER"}
             </button>
           </form>
-
-          {!isInstalled ? (
-            <button type="button" className="install-app-button" onClick={() => void handleInstall()}>
-              INSTALL ON THIS PHONE
-            </button>
-          ) : null}
-          {installHelp ? <p className="install-help">{installHelp}</p> : null}
           <small>Private staff tool / family details stay on this phone.</small>
         </section>
       </main>
