@@ -1095,7 +1095,7 @@ export default function PlayPotApp() {
         <div className="brand-row">
           <h1>PLAY POT</h1>
           <div className="brand-actions">
-            <span className="live-label">THIS PHONE / LIVE VIEW</span>
+            <span className="live-label">THIS PHONE / LIVE</span>
           </div>
         </div>
 

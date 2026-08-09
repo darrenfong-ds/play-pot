@@ -83,7 +83,8 @@ test("keeps phone control local and exposes only a read-only live mirror", async
 
   assert.match(client, /window\.localStorage/);
   assert.match(client, /LOCAL_STORAGE_KEY/);
-  assert.match(client, /THIS PHONE \/ LIVE VIEW/);
+  assert.match(client, /THIS PHONE \/ LIVE/);
+  assert.doesNotMatch(client, /THIS PHONE \/ LIVE VIEW/);
   assert.match(client, /createLiveSyncPayload/);
   assert.match(client, /fetch\("\/api\/live"/);
   assert.match(client, /Read-only live view active/);
