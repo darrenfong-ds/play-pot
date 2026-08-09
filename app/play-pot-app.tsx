@@ -46,8 +46,6 @@ type Notice = {
 
 type AuthState = "checking" | "locked" | "ready";
 
-type Theme = "light" | "dark";
-
 type EditCandidate = {
   family: Family;
   adults: number;
@@ -65,7 +63,6 @@ const sgTime = new Intl.DateTimeFormat("en-SG", {
 
 const ENTRY_LOCK_MILLISECONDS = 700;
 const ACTION_NOTICE_MILLISECONDS = 1_000;
-const THEME_STORAGE_KEY = "play-pot.theme.v1";
 
 function formatClock(value: string | null) {
   return value ? sgTime.format(new Date(value)) : "-";
@@ -81,30 +78,6 @@ function familyBreakdown(family: Family) {
     family.children === 1 ? "CHILD" : "CHILDREN"
   }`;
   return `${adults}, ${children}`;
-}
-
-function ThemeToggle({
-  theme,
-  onToggle,
-}: {
-  theme: Theme;
-  onToggle: () => void;
-}) {
-  const dark = theme === "dark";
-  return (
-    <button
-      type="button"
-      className="theme-toggle"
-      aria-pressed={dark}
-      aria-label={`Switch to ${dark ? "light" : "dark"} mode`}
-      onClick={onToggle}
-    >
-      <span className="theme-toggle-track" aria-hidden="true">
-        <span className="theme-toggle-orb" />
-      </span>
-      <span>{dark ? "LIGHT" : "DARK"}</span>
-    </button>
-  );
 }
 
 function timerState(family: Family, now: number) {
@@ -320,9 +293,9 @@ function ActiveFamilyCard({
 
       <div className="family-times">
         <span>IN {formatClock(family.enteredAt)}</span>
-        <span aria-hidden="true">/</span>
         <span>
-          {family.timeLimitMinutes} MIN {formatClock(familyDueAt(family))}
+          DUE {formatClock(familyDueAt(family))} &middot;{" "}
+          {family.timeLimitMinutes} MIN
         </span>
       </div>
 
@@ -361,8 +334,6 @@ export default function PlayPotApp() {
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [theme, setTheme] = useState<Theme>("light");
-  const [themeReady, setThemeReady] = useState(false);
   const [customAdults, setCustomAdults] = useState(1);
   const [customChildren, setCustomChildren] = useState(1);
   const [visual, setVisual] = useState("");
@@ -420,10 +391,6 @@ export default function PlayPotApp() {
     }
     if (saved) showState(sanitizedNext);
     return saved;
-  }
-
-  function handleThemeToggle() {
-    setTheme((current) => (current === "light" ? "dark" : "light"));
   }
 
   function openThisPhoneState() {
@@ -508,32 +475,6 @@ export default function PlayPotApp() {
       );
     }
   }
-
-  useEffect(() => {
-    const readTheme = window.setTimeout(() => {
-      try {
-        const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-        if (savedTheme === "dark" || savedTheme === "light") {
-          setTheme(savedTheme);
-        }
-      } catch {
-        // Light mode remains the safe fallback when preferences cannot be read.
-      } finally {
-        setThemeReady(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(readTheme);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    if (!themeReady) return;
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {
-      // Theme persistence is optional and must never block Play Pot operations.
-    }
-  }, [theme, themeReady]);
 
   useEffect(
     () => () => {
@@ -943,9 +884,6 @@ export default function PlayPotApp() {
     return (
       <main className="guest-screen">
         <section className="guest-card" aria-labelledby="guest-title">
-          <div className="guest-theme-row">
-            <ThemeToggle theme={theme} onToggle={handleThemeToggle} />
-          </div>
           <div className="brand-mark">PP</div>
           <span className="guest-kicker">STAFF GUEST ACCESS</span>
           <h1 id="guest-title">PLAY POT</h1>
@@ -1051,7 +989,6 @@ export default function PlayPotApp() {
           <h1>PLAY POT</h1>
           <div className="brand-actions">
             <span className="live-label">THIS PHONE / LIVE</span>
-            <ThemeToggle theme={theme} onToggle={handleThemeToggle} />
           </div>
         </div>
 
@@ -1070,7 +1007,7 @@ export default function PlayPotApp() {
             </strong>
             <span>
               {paxInside <= CAPACITY
-                ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT TO ${CAPACITY} PAX`
+                ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT`
                 : "MAX PAX"}
             </span>
           </div>

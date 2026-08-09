@@ -111,6 +111,8 @@ test("keeps all operational data on one device", async () => {
     client,
     /slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"/,
   );
+  assert.match(client, /\? `\$\{slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"\} LEFT`/);
+  assert.doesNotMatch(client, /LEFT TO \$\{CAPACITY\} PAX/);
   assert.match(client, /MAX PAX/);
   assert.match(client, /Recently OUT/);
   assert.match(client, /RESTORE/);
@@ -126,8 +128,15 @@ test("keeps all operational data on one device", async () => {
   );
   assert.match(client, /RECORDED ✓/);
   assert.match(client, /NEXT DUE/);
-  assert.match(client, /play-pot\.theme\.v1/);
-  assert.match(client, /<ThemeToggle/);
+  assert.doesNotMatch(
+    client,
+    /ThemeToggle|THEME_STORAGE_KEY|handleThemeToggle|setTheme|data-theme/,
+  );
+  assert.doesNotMatch(css, /data-theme="dark"|theme-toggle|guest-theme-row/);
+  assert.match(
+    client,
+    /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*DUE \{formatClock\(familyDueAt\(family\)\)\} &middot;\{" "\}[\s\S]*\{family\.timeLimitMinutes\} MIN/,
+  );
   assert.doesNotMatch(client, /-5 MIN/);
   assert.doesNotMatch(client, /RESET 15/);
   assert.doesNotMatch(client, /\+5 MIN/);
