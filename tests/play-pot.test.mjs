@@ -148,6 +148,7 @@ test("keeps all operational data on one device", async () => {
   assert.doesNotMatch(client, /PAX FITS|ENTER FAMILY/);
   assert.doesNotMatch(css, /admission-result|result-fit/);
   assert.doesNotMatch(client, /to target after entry/);
+  assert.match(client, /activeFamilies\.length === 0[\s\S]*\? "EMPTY"/);
   assert.match(client, /activeFamilies\.length === 1 \? "FAMILY" : "FAMILIES"/);
   assert.match(client, /Decrease time limit by 1 minute/);
   assert.match(client, /Extend time limit by 1 minute/);

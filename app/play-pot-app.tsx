@@ -1106,8 +1106,11 @@ export default function PlayPotApp() {
           <div className="section-heading">
             <h2 id="inside-title">Inside now</h2>
             <span className="section-count">
-              {activeFamilies.length}{" "}
-              {activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"}
+              {activeFamilies.length === 0
+                ? "EMPTY"
+                : `${activeFamilies.length} ${
+                    activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
+                  }`}
             </span>
           </div>
 
