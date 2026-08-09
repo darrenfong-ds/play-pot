@@ -137,20 +137,6 @@ input::placeholder {
   letter-spacing: 0.045em;
 }
 
-.live-label {
-  color: var(--aqua);
-  font-size: 0.64rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-}
-
-.brand-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.55rem;
-}
-
 .capacity-row {
   display: grid;
   grid-template-columns: 1.55fr 0.85fr;
@@ -1474,14 +1460,6 @@ input::placeholder {
 
   .brand-row {
     gap: 0.5rem;
-  }
-
-  .brand-actions {
-    gap: 0.35rem;
-  }
-
-  .live-label {
-    font-size: 0.58rem;
   }
 
   .capacity-row {

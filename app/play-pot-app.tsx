@@ -1094,9 +1094,6 @@ export default function PlayPotApp() {
       <header className="status-header">
         <div className="brand-row">
           <h1>PLAY POT</h1>
-          <div className="brand-actions">
-            <span className="live-label">THIS PHONE / LIVE</span>
-          </div>
         </div>
 
         <div className="capacity-row">
