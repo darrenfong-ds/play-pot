@@ -105,6 +105,13 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /YES, DELETE/);
   assert.match(client, /deleteRecentLocalFamily/);
   assert.match(client, /ENTRY_LOCK_MILLISECONDS = 700/);
+  assert.match(client, /ACTION_NOTICE_MILLISECONDS = 1_000/);
+  assert.equal(
+    client.match(
+      /durationMs: saved \? ACTION_NOTICE_MILLISECONDS : undefined/g,
+    )?.length,
+    2,
+  );
   assert.match(client, /RECORDED ✓/);
   assert.match(client, /NEXT DUE/);
   assert.match(client, /play-pot\.theme\.v1/);

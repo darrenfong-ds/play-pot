@@ -41,6 +41,7 @@ type Notice = {
   tone: "success" | "error" | "info";
   message: string;
   undo?: UndoAction;
+  durationMs?: number;
 };
 
 type AuthState = "checking" | "locked" | "ready";
@@ -68,6 +69,7 @@ const sgTime = new Intl.DateTimeFormat("en-SG", {
 });
 
 const ENTRY_LOCK_MILLISECONDS = 700;
+const ACTION_NOTICE_MILLISECONDS = 1_000;
 const THEME_STORAGE_KEY = "play-pot.theme.v1";
 
 function formatClock(value: string | null) {
@@ -656,11 +658,12 @@ export default function PlayPotApp() {
     if (!notice) return;
     const timeout = window.setTimeout(
       () => setNotice(null),
-      notice.undo
-        ? UNDO_MILLISECONDS
-        : notice.tone === "error"
-          ? 10_000
-          : 8_000,
+      notice.durationMs ??
+        (notice.undo
+          ? UNDO_MILLISECONDS
+          : notice.tone === "error"
+            ? 10_000
+            : 8_000),
     );
     return () => window.clearTimeout(timeout);
   }, [notice]);
@@ -808,6 +811,7 @@ export default function PlayPotApp() {
         message: saved
           ? `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
           : "Entry was not recorded because this phone could not save it. Try again.",
+        durationMs: saved ? ACTION_NOTICE_MILLISECONDS : undefined,
       });
       recorded = saved;
       if (saved) {
@@ -849,6 +853,7 @@ export default function PlayPotApp() {
           ? `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`
           : "OUT was not recorded because this phone could not save it. Try again.",
         undo: saved ? { id: liveFamily.id } : undefined,
+        durationMs: saved ? ACTION_NOTICE_MILLISECONDS : undefined,
       });
       if (saved) vibrate();
     } catch (error) {
