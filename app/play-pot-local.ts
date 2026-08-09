@@ -45,6 +45,7 @@ type LocalStateErrorCode =
   | "invalid_count"
   | "invalid_time_limit"
   | "capacity_exceeded"
+  | "delete_unavailable"
   | "family_changed"
   | "restore_unavailable"
   | "undo_unavailable"
@@ -336,6 +337,19 @@ export function familyDueAt(family: Family) {
   ).toISOString();
 }
 
+export function nextDueLocalFamily(state: PlayPotState) {
+  return insideFamilies(state).reduce<Family | null>((earliest, family) => {
+    if (!earliest) return family;
+    const dueDifference =
+      Date.parse(familyDueAt(family)) - Date.parse(familyDueAt(earliest));
+    if (dueDifference < 0) return family;
+    if (dueDifference === 0 && family.familyNumber < earliest.familyNumber) {
+      return family;
+    }
+    return earliest;
+  }, null);
+}
+
 function nextRevision(state: PlayPotState) {
   return state.revision + 1;
 }
@@ -485,6 +499,40 @@ export function restoreRecentLocalFamily(
         : candidate,
     ),
     undo: null,
+    savedAt: timestamp,
+  };
+}
+
+export function deleteRecentLocalFamily(
+  state: PlayPotState,
+  familyId: string,
+  now = Date.now(),
+): PlayPotState {
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const family = currentState.families.find(
+    (candidate) => candidate.id === familyId && candidate.status === "completed",
+  );
+  if (!family || !familyIsWithinRecentOutWindow(family, now)) {
+    throw new LocalStateError(
+      "delete_unavailable",
+      "That recent OUT record is no longer available to delete.",
+    );
+  }
+
+  const timestamp = new Date(now).toISOString();
+  const revision = nextRevision(currentState);
+  return {
+    ...currentState,
+    revision,
+    families: currentState.families.filter(
+      (candidate) => candidate.id !== familyId,
+    ),
+    undo:
+      currentState.undo &&
+      currentState.undo.familyId !== familyId &&
+      Date.parse(currentState.undo.expiresAt) >= now
+        ? { ...currentState.undo, afterRevision: revision }
+        : null,
     savedAt: timestamp,
   };
 }

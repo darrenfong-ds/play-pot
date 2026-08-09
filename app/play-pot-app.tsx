@@ -7,6 +7,7 @@ import {
   createInitialState,
   currentPax,
   DEFAULT_TIME_LIMIT_MINUTES,
+  deleteRecentLocalFamily,
   editLocalFamily,
   familyDueAt,
   familyPax,
@@ -19,6 +20,7 @@ import {
   LOCAL_STORAGE_KEY,
   MAX_TIME_LIMIT_MINUTES,
   markLocalFamilyOut,
+  nextDueLocalFamily,
   purgeExpiredCompletedFamilies,
   RECENT_OUT_MILLISECONDS,
   recentOutFamilies,
@@ -27,9 +29,15 @@ import {
   restoreRecentLocalFamily,
   serializeLocalState,
   spacesLeft,
+  UNDO_MILLISECONDS,
   type Family,
   type PlayPotState,
 } from "./play-pot-local";
+import {
+  createOfflineAccess,
+  OFFLINE_ACCESS_KEY,
+  readOfflineAccess,
+} from "./offline-access";
 
 type UndoAction = {
   id: string;
@@ -43,6 +51,16 @@ type Notice = {
 
 type AuthState = "checking" | "locked" | "ready";
 
+type Theme = "light" | "dark";
+
+type EditCandidate = {
+  family: Family;
+  adults: number;
+  children: number;
+  visual: string;
+  timeLimitMinutes: number;
+};
+
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -55,12 +73,40 @@ const sgTime = new Intl.DateTimeFormat("en-SG", {
   timeZone: "Asia/Singapore",
 });
 
+const ENTRY_LOCK_MILLISECONDS = 700;
+const GUEST_CHECK_TIMEOUT_MILLISECONDS = 7_000;
+const THEME_STORAGE_KEY = "play-pot.theme.v1";
+
 function formatClock(value: string | null) {
   return value ? sgTime.format(new Date(value)) : "-";
 }
 
 function familyLabel(family: Family) {
   return `F${family.familyNumber}`;
+}
+
+function ThemeToggle({
+  theme,
+  onToggle,
+}: {
+  theme: Theme;
+  onToggle: () => void;
+}) {
+  const dark = theme === "dark";
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-pressed={dark}
+      aria-label={`Switch to ${dark ? "light" : "dark"} mode`}
+      onClick={onToggle}
+    >
+      <span className="theme-toggle-track" aria-hidden="true">
+        <span className="theme-toggle-orb" />
+      </span>
+      <span>{dark ? "LIGHT" : "DARK"}</span>
+    </button>
+  );
 }
 
 function timerState(family: Family, now: number) {
@@ -94,7 +140,7 @@ function Stepper({
   max?: number;
 }) {
   return (
-    <div className="stepper" aria-label={`${label}: ${value}`}>
+    <div className="stepper" role="group" aria-label={`${label}: ${value}`}>
       <span className="stepper-label">{label}</span>
       <button
         type="button"
@@ -119,26 +165,49 @@ function Stepper({
 
 function FamilyEditor({
   family,
+  paxInside,
   onSave,
   disabled,
 }: {
   family: Family;
+  paxInside: number;
   onSave: (
     adults: number,
     children: number,
     visual: string,
     timeLimitMinutes: number,
+    trigger: HTMLButtonElement,
   ) => void;
   disabled: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [adults, setAdults] = useState(family.adults);
   const [children, setChildren] = useState(family.children);
   const [visual, setVisual] = useState(family.visual);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(family.timeLimitMinutes);
+  const projectedPax =
+    paxInside - familyPax(family) + adults + children;
+  const changed =
+    adults !== family.adults ||
+    children !== family.children ||
+    visual !== family.visual ||
+    timeLimitMinutes !== family.timeLimitMinutes;
+
+  function resetAndClose() {
+    setAdults(family.adults);
+    setChildren(family.children);
+    setVisual(family.visual);
+    setTimeLimitMinutes(family.timeLimitMinutes);
+    setOpen(false);
+  }
 
   return (
-    <details className="family-editor">
-      <summary>Edit</summary>
+    <details
+      className="family-editor"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary aria-label={`Edit ${familyLabel(family)}`}>Edit</summary>
       <div className="editor-body">
         <div className="editor-steppers">
           <Stepper
@@ -155,7 +224,7 @@ function FamilyEditor({
           />
         </div>
         <label className="field-label" htmlFor={`visual-${family.id}`}>
-          Visual identifier
+          Visual identifier <span>clothing/items only</span>
         </label>
         <input
           id={`visual-${family.id}`}
@@ -192,14 +261,70 @@ function FamilyEditor({
             +
           </button>
         </div>
-        <button
-          className="save-correction"
-          type="button"
-          disabled={disabled}
-          onClick={() => onSave(adults, children, visual, timeLimitMinutes)}
+        <div className="quick-time-actions" aria-label="Quick time adjustments">
+          <button
+            type="button"
+            disabled={timeLimitMinutes <= 1}
+            onClick={() =>
+              setTimeLimitMinutes((minutes) => Math.max(1, minutes - 5))
+            }
+          >
+            -5 MIN
+          </button>
+          <button
+            type="button"
+            disabled={timeLimitMinutes === DEFAULT_TIME_LIMIT_MINUTES}
+            onClick={() => setTimeLimitMinutes(DEFAULT_TIME_LIMIT_MINUTES)}
+          >
+            RESET 15
+          </button>
+          <button
+            type="button"
+            disabled={timeLimitMinutes >= MAX_TIME_LIMIT_MINUTES}
+            onClick={() =>
+              setTimeLimitMinutes((minutes) =>
+                Math.min(MAX_TIME_LIMIT_MINUTES, minutes + 5),
+              )
+            }
+          >
+            +5 MIN
+          </button>
+        </div>
+        <div
+          className={`edit-projection ${
+            projectedPax > FLEX_CAPACITY
+              ? "edit-projection-critical"
+              : projectedPax > CAPACITY
+                ? "edit-projection-flex"
+                : ""
+          }`}
         >
-          SAVE CHANGES
-        </button>
+          <span>LIVE TOTAL AFTER SAVE</span>
+          <strong>
+            {paxInside} → {projectedPax}
+          </strong>
+        </div>
+        <div className="editor-actions">
+          <button className="cancel-correction" type="button" onClick={resetAndClose}>
+            CANCEL
+          </button>
+          <button
+            className="save-correction"
+            type="button"
+            disabled={disabled || !changed}
+            onClick={(event) =>
+              onSave(
+                adults,
+                children,
+                visual,
+                timeLimitMinutes,
+                event.currentTarget,
+              )
+            }
+          >
+            SAVE CHANGES
+          </button>
+        </div>
       </div>
     </details>
   );
@@ -208,12 +333,14 @@ function FamilyEditor({
 function ActiveFamilyCard({
   family,
   now,
+  paxInside,
   disabled,
   onOut,
   onEdit,
 }: {
   family: Family;
   now: number;
+  paxInside: number;
   disabled: boolean;
   onOut: (trigger: HTMLButtonElement) => void;
   onEdit: (
@@ -221,6 +348,7 @@ function ActiveFamilyCard({
     children: number,
     visual: string,
     timeLimitMinutes: number,
+    trigger: HTMLButtonElement,
   ) => void;
 }) {
   const timer = timerState(family, now);
@@ -255,6 +383,7 @@ function ActiveFamilyCard({
         <FamilyEditor
           key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
           family={family}
+          paxInside={paxInside}
           disabled={disabled}
           onSave={onEdit}
         />
@@ -281,7 +410,10 @@ export default function PlayPotApp() {
   const [loadError, setLoadError] = useState("");
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [theme, setTheme] = useState<Theme>("light");
+  const [themeReady, setThemeReady] = useState(false);
   const [customAdults, setCustomAdults] = useState(1);
   const [customChildren, setCustomChildren] = useState(1);
   const [visual, setVisual] = useState("");
@@ -290,7 +422,17 @@ export default function PlayPotApp() {
   const [outCandidate, setOutCandidate] = useState<Family | null>(null);
   const [confirmFlex, setConfirmFlex] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<Family | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Family | null>(null);
+  const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
+  const [entryLocked, setEntryLocked] = useState(false);
+  const [entryRecorded, setEntryRecorded] = useState(false);
+  const entryLockRef = useRef(false);
+  const entryUnlockTimerRef = useRef<number | null>(null);
+  const offlineAccessPreparingRef = useRef<number | null>(null);
+  const offlineAccessGenerationRef = useRef(0);
+  const guestCheckGenerationRef = useRef(0);
   const cancelConfirmationRef = useRef<HTMLButtonElement | null>(null);
+  const confirmationDialogRef = useRef<HTMLElement | null>(null);
   const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const confirmationHandledRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -303,7 +445,10 @@ export default function PlayPotApp() {
     setRecoveryRequired(false);
   }
 
-  function commitState(next: PlayPotState) {
+  function commitState(
+    next: PlayPotState,
+    options: { mirrorToBackup?: boolean } = {},
+  ) {
     const previous = stateRef.current;
     const savedAt = Date.now();
     const sanitizedNext = purgeExpiredCompletedFamilies(next, savedAt);
@@ -313,7 +458,7 @@ export default function PlayPotApp() {
       if (!readLocalState(serialized, savedAt)) {
         throw new Error("The updated phone record could not be verified.");
       }
-      if (previous) {
+      if (previous && options.mirrorToBackup !== true) {
         window.localStorage.setItem(
           LOCAL_STORAGE_BACKUP_KEY,
           serializeLocalState(
@@ -331,8 +476,113 @@ export default function PlayPotApp() {
       saved = false;
       setUnsaved(true);
     }
-    showState(sanitizedNext);
+    if (saved) showState(sanitizedNext);
     return saved;
+  }
+
+  function handleThemeToggle() {
+    setTheme((current) => (current === "light" ? "dark" : "light"));
+  }
+
+  function clearOfflineAccess() {
+    offlineAccessGenerationRef.current += 1;
+    try {
+      window.localStorage.removeItem(OFFLINE_ACCESS_KEY);
+    } catch {
+      // Access is already unavailable if this browser cannot update local storage.
+    }
+  }
+
+  function hasValidOfflineAccess() {
+    try {
+      return Boolean(
+        readOfflineAccess(
+          window.localStorage.getItem(OFFLINE_ACCESS_KEY),
+          Date.now(),
+        ),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function queryOfflineWorker(worker: ServiceWorker) {
+    return new Promise<boolean>((resolve) => {
+      const channel = new MessageChannel();
+      let settled = false;
+      const finish = (ready: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        channel.port1.close();
+        resolve(ready);
+      };
+      const timeout = window.setTimeout(() => finish(false), 600);
+      channel.port1.onmessage = (event: MessageEvent) => {
+        finish(
+          event.data?.type === "PLAY_POT_OFFLINE_STATUS" &&
+            event.data?.ready === true,
+        );
+      };
+      try {
+        worker.postMessage(
+          { type: "PLAY_POT_OFFLINE_STATUS" },
+          [channel.port2],
+        );
+      } catch {
+        finish(false);
+      }
+    });
+  }
+
+  async function offlineShellIsReady() {
+    const deadline = Date.now() + 8_000;
+    do {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        const candidates = [registration.waiting, registration.active].filter(
+          (worker, index, workers): worker is ServiceWorker =>
+            Boolean(worker) && workers.indexOf(worker) === index,
+        );
+        const readiness = await Promise.all(
+          candidates.map((worker) => queryOfflineWorker(worker)),
+        );
+        if (readiness.some(Boolean)) return true;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+    } while (Date.now() < deadline);
+    return false;
+  }
+
+  function rememberOfflineAccessWhenReady(verifiedAt: number) {
+    const generation = offlineAccessGenerationRef.current;
+    if (
+      !("serviceWorker" in navigator) ||
+      offlineAccessPreparingRef.current === generation
+    ) {
+      return;
+    }
+    offlineAccessPreparingRef.current = generation;
+    void (async () => {
+      try {
+        await navigator.serviceWorker.ready;
+        if (!(await offlineShellIsReady())) return;
+        if (generation !== offlineAccessGenerationRef.current) return;
+        const access = createOfflineAccess(verifiedAt);
+        const serializedAccess = JSON.stringify(access);
+        if (!readOfflineAccess(serializedAccess, Date.now())) return;
+        window.localStorage.setItem(
+          OFFLINE_ACCESS_KEY,
+          serializedAccess,
+        );
+      } catch {
+        // Offline access is optional and visitor records remain untouched.
+      } finally {
+        if (offlineAccessPreparingRef.current === generation) {
+          offlineAccessPreparingRef.current = null;
+        }
+      }
+    })();
   }
 
   function openThisPhoneState() {
@@ -394,22 +644,99 @@ export default function PlayPotApp() {
   }
 
   async function loadState() {
+    const requestGeneration = guestCheckGenerationRef.current + 1;
+    guestCheckGenerationRef.current = requestGeneration;
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(
+      () => controller.abort(),
+      GUEST_CHECK_TIMEOUT_MILLISECONDS,
+    );
     setLoadError("");
     try {
-      const response = await fetch("/api/guest", { cache: "no-store" });
-      const body = (await response.json()) as { authenticated?: boolean; error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Could not open Play Pot.");
-      if (!body.authenticated) {
+      const response = await fetch("/api/guest", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (requestGeneration !== guestCheckGenerationRef.current) return;
+      if (response.status === 401 || response.status === 403) {
+        clearOfflineAccess();
         stateRef.current = null;
         setState(null);
+        setIsOffline(false);
         setAuthState("locked");
         return;
       }
+      const body = (await response.json()) as {
+        authenticated?: boolean;
+        error?: string;
+      };
+      if (requestGeneration !== guestCheckGenerationRef.current) return;
+      if (!response.ok) {
+        throw new Error(body.error ?? "Play Pot is temporarily unavailable.");
+      }
+      if (!body.authenticated) {
+        clearOfflineAccess();
+        stateRef.current = null;
+        setState(null);
+        setIsOffline(false);
+        setAuthState("locked");
+        return;
+      }
+      const verifiedAt = Date.now();
+      setIsOffline(false);
       openThisPhoneState();
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not open Play Pot.");
+      rememberOfflineAccessWhenReady(verifiedAt);
+    } catch {
+      if (requestGeneration !== guestCheckGenerationRef.current) return;
+      if (stateRef.current || hasValidOfflineAccess()) {
+        setIsOffline(true);
+        setLoadError("");
+        if (!stateRef.current) openThisPhoneState();
+        return;
+      }
+      setIsOffline(true);
+      setLoadError(
+        "Connect once and open Play Pot online before using it offline.",
+      );
+    } finally {
+      window.clearTimeout(requestTimeout);
     }
   }
+
+  useEffect(() => {
+    const readTheme = window.setTimeout(() => {
+      try {
+        const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+        if (savedTheme === "dark" || savedTheme === "light") {
+          setTheme(savedTheme);
+        }
+      } catch {
+        // Light mode remains the safe fallback when preferences cannot be read.
+      } finally {
+        setThemeReady(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(readTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    if (!themeReady) return;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Theme persistence is optional and must never block Play Pot operations.
+    }
+  }, [theme, themeReady]);
+
+  useEffect(
+    () => () => {
+      if (entryUnlockTimerRef.current !== null) {
+        window.clearTimeout(entryUnlockTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void loadState(), 0);
@@ -420,17 +747,41 @@ export default function PlayPotApp() {
       void loadState();
     };
     const refreshFromThisBrowser = (event: StorageEvent) => {
-      if (event.key !== LOCAL_STORAGE_KEY || !event.newValue) return;
+      if (event.key !== LOCAL_STORAGE_KEY) return;
+      if (!event.newValue) {
+        stateRef.current = null;
+        setState(null);
+        setRecoveryRequired(true);
+        setNotice({
+          tone: "error",
+          message: "This phone's Play Pot record was cleared in another window.",
+        });
+        return;
+      }
       const next = readLocalState(event.newValue);
       if (next) showState(next);
     };
+    const markOffline = () => setIsOffline(true);
+    const revalidateOnline = () => {
+      void loadState();
+      if ("serviceWorker" in navigator) {
+        void navigator.serviceWorker
+          .getRegistration()
+          .then((registration) => registration?.update())
+          .catch(() => undefined);
+      }
+    };
     document.addEventListener("visibilitychange", refreshOnReturn);
     window.addEventListener("storage", refreshFromThisBrowser);
+    window.addEventListener("offline", markOffline);
+    window.addEventListener("online", revalidateOnline);
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
       window.removeEventListener("storage", refreshFromThisBrowser);
+      window.removeEventListener("offline", markOffline);
+      window.removeEventListener("online", revalidateOnline);
     };
     // This effect owns the page lifecycle and deliberately runs once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -442,7 +793,10 @@ export default function PlayPotApp() {
     const checkedAt = Date.now();
     const sanitized = purgeExpiredCompletedFamilies(state, checkedAt);
     if (sanitized !== state) {
-      const immediateCleanup = window.setTimeout(() => commitState(sanitized), 0);
+      const immediateCleanup = window.setTimeout(
+        () => commitState(sanitized, { mirrorToBackup: true }),
+        0,
+      );
       return () => window.clearTimeout(immediateCleanup);
     }
 
@@ -458,7 +812,9 @@ export default function PlayPotApp() {
       const current = stateRef.current;
       if (!current) return;
       const next = purgeExpiredCompletedFamilies(current, Date.now());
-      if (next !== current) commitState(next);
+      if (next !== current) {
+        commitState(next, { mirrorToBackup: true });
+      }
     }, Math.max(0, nextExpiry - Date.now() + 25));
 
     return () => window.clearTimeout(expiryCleanup);
@@ -487,7 +843,9 @@ export default function PlayPotApp() {
     window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
     window.addEventListener("appinstalled", markInstalled);
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      void navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .catch(() => undefined);
     }
 
     return () => {
@@ -501,38 +859,72 @@ export default function PlayPotApp() {
     if (!notice) return;
     const timeout = window.setTimeout(
       () => setNotice(null),
-      notice.tone === "error" ? 10_000 : 8_000,
+      notice.undo
+        ? UNDO_MILLISECONDS
+        : notice.tone === "error"
+          ? 10_000
+          : 8_000,
     );
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
   useEffect(() => {
-    if (!outCandidate && !confirmFlex && !restoreCandidate) return;
+    if (
+      !outCandidate &&
+      !confirmFlex &&
+      !restoreCandidate &&
+      !deleteCandidate &&
+      !editCandidate
+    ) {
+      return;
+    }
     confirmationHandledRef.current = false;
-    const cancelConfirmation = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOutCandidate(null);
-      setConfirmFlex(false);
-      setRestoreCandidate(null);
-      const returnTarget = confirmationReturnFocusRef.current;
-      confirmationReturnFocusRef.current = null;
-      window.setTimeout(() => returnTarget?.focus(), 0);
+    const handleConfirmationKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOutCandidate(null);
+        setConfirmFlex(false);
+        setRestoreCandidate(null);
+        setDeleteCandidate(null);
+        setEditCandidate(null);
+        const returnTarget = confirmationReturnFocusRef.current;
+        confirmationReturnFocusRef.current = null;
+        window.setTimeout(() => returnTarget?.focus(), 0);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const buttons = Array.from(
+        confirmationDialogRef.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ) ?? [],
+      );
+      const first = buttons.at(0);
+      const last = buttons.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     const focusCancelButton = window.setTimeout(
       () => cancelConfirmationRef.current?.focus(),
       0,
     );
-    document.addEventListener("keydown", cancelConfirmation);
+    document.addEventListener("keydown", handleConfirmationKeydown);
     return () => {
       window.clearTimeout(focusCancelButton);
-      document.removeEventListener("keydown", cancelConfirmation);
+      document.removeEventListener("keydown", handleConfirmationKeydown);
     };
-  }, [outCandidate, confirmFlex, restoreCandidate]);
+  }, [outCandidate, confirmFlex, restoreCandidate, deleteCandidate, editCandidate]);
 
   function cancelOpenConfirmation() {
     setOutCandidate(null);
     setConfirmFlex(false);
     setRestoreCandidate(null);
+    setDeleteCandidate(null);
+    setEditCandidate(null);
     const returnTarget = confirmationReturnFocusRef.current;
     confirmationReturnFocusRef.current = null;
     window.setTimeout(() => returnTarget?.focus(), 0);
@@ -563,13 +955,20 @@ export default function PlayPotApp() {
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          clearOfflineAccess();
+        }
         setUnlockError(body.error ?? "Could not open Play Pot.");
         return;
       }
+      const verifiedAt = Date.now();
       setGuestPin("");
+      rememberOfflineAccessWhenReady(verifiedAt);
       await loadState();
     } catch {
-      setUnlockError("Could not connect. Check this phone's internet connection.");
+      setUnlockError(
+        "Connect to the internet once to unlock offline access on this phone.",
+      );
     } finally {
       setPending("");
     }
@@ -594,33 +993,57 @@ export default function PlayPotApp() {
   }
 
   function handleAdd(allowFlex = false) {
+    if (entryLockRef.current) return;
     const current = stateRef.current;
     if (!current) return;
+    entryLockRef.current = true;
+    setEntryLocked(true);
+    setEntryRecorded(false);
+    let recorded = false;
     try {
+      const actionAt = Date.now();
       const next = addLocalFamily(
         current,
         { adults: customAdults, children: customChildren, visual },
         crypto.randomUUID(),
-        now,
+        actionAt,
         { allowFlex },
       );
       const added = insideFamilies(next).find(
         (family) => family.familyNumber === current.nextFamilyNumber,
       );
-      commitState(next);
+      const saved = commitState(next);
       const totalInside = currentPax(next);
       setNotice({
-        tone: "success",
-        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${
-          totalInside > CAPACITY ? `FLEX ${totalInside} of ${FLEX_CAPACITY}` : `${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
-        }`,
+        tone: saved ? "success" : "error",
+        message: saved
+          ? `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${
+              totalInside > CAPACITY
+                ? `FLEX ${totalInside} of ${FLEX_CAPACITY}`
+                : `${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
+            }`
+          : "Entry was not recorded because this phone could not save it. Try again.",
       });
-      setCustomAdults(1);
-      setCustomChildren(1);
-      setVisual("");
-      vibrate();
+      recorded = saved;
+      if (saved) {
+        setCustomAdults(1);
+        setCustomChildren(1);
+        setVisual("");
+        vibrate();
+      }
     } catch (error) {
       reportActionError(error);
+    } finally {
+      setEntryRecorded(recorded);
+      if (entryUnlockTimerRef.current !== null) {
+        window.clearTimeout(entryUnlockTimerRef.current);
+      }
+      entryUnlockTimerRef.current = window.setTimeout(() => {
+        entryLockRef.current = false;
+        setEntryLocked(false);
+        setEntryRecorded(false);
+        entryUnlockTimerRef.current = null;
+      }, ENTRY_LOCK_MILLISECONDS);
     }
   }
 
@@ -628,18 +1051,21 @@ export default function PlayPotApp() {
     const current = stateRef.current;
     if (!current) return;
     try {
+      const actionAt = Date.now();
       const liveFamily = insideFamilies(current).find(
         (candidate) => candidate.id === family.id,
       );
       if (!liveFamily) throw new Error("That family is no longer inside.");
-      const next = markLocalFamilyOut(current, liveFamily.id, now);
-      commitState(next);
+      const next = markLocalFamilyOut(current, liveFamily.id, actionAt);
+      const saved = commitState(next);
       setNotice({
-        tone: "success",
-        message: `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`,
-        undo: { id: liveFamily.id },
+        tone: saved ? "success" : "error",
+        message: saved
+          ? `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`
+          : "OUT was not recorded because this phone could not save it. Try again.",
+        undo: saved ? { id: liveFamily.id } : undefined,
       });
-      vibrate();
+      if (saved) vibrate();
     } catch (error) {
       reportActionError(error);
     }
@@ -659,26 +1085,63 @@ export default function PlayPotApp() {
         current,
         family.id,
         { adults, children, visual: nextVisual, timeLimitMinutes },
-        now,
+        // A correction must use the actual tap time after mobile backgrounding.
+        // eslint-disable-next-line react-hooks/purity
+        Date.now(),
       );
-      commitState(next);
+      const saved = commitState(next);
       setNotice({
-        tone: "success",
-        message: `${familyLabel(family)} updated / ${adults + children} pax / ${timeLimitMinutes} min`,
+        tone: saved ? "success" : "error",
+        message: saved
+          ? `${familyLabel(family)} updated / ${adults + children} pax / ${timeLimitMinutes} min`
+          : "Changes were not recorded because this phone could not save them.",
       });
     } catch (error) {
       reportActionError(error);
     }
   }
 
+  function requestEdit(
+    family: Family,
+    adults: number,
+    children: number,
+    nextVisual: string,
+    timeLimitMinutes: number,
+    trigger: HTMLButtonElement,
+  ) {
+    const current = stateRef.current;
+    if (!current) return;
+    const projectedPax =
+      currentPax(current) - familyPax(family) + adults + children;
+    const increasesLivePax = adults + children > familyPax(family);
+    if (increasesLivePax && projectedPax > CAPACITY) {
+      confirmationReturnFocusRef.current = trigger;
+      confirmationHandledRef.current = false;
+      setEditCandidate({
+        family,
+        adults,
+        children,
+        visual: nextVisual,
+        timeLimitMinutes,
+      });
+      return;
+    }
+    handleEdit(family, adults, children, nextVisual, timeLimitMinutes);
+  }
+
   function handleUndo(undo: UndoAction) {
     const current = stateRef.current;
     if (!current) return;
     try {
-      const next = restoreLocalFamily(current, undo.id, now);
-      commitState(next);
-      setNotice({ tone: "success", message: "Last OUT action undone" });
-      vibrate();
+      const next = restoreLocalFamily(current, undo.id, Date.now());
+      const saved = commitState(next);
+      setNotice({
+        tone: saved ? "success" : "error",
+        message: saved
+          ? "Last OUT action undone"
+          : "Undo was not recorded because this phone could not save it.",
+      });
+      if (saved) vibrate();
     } catch (error) {
       reportActionError(error);
     }
@@ -688,22 +1151,42 @@ export default function PlayPotApp() {
     const current = stateRef.current;
     if (!current) return;
     try {
-      const next = restoreRecentLocalFamily(current, family.id, now);
-      commitState(next);
+      const next = restoreRecentLocalFamily(current, family.id, Date.now());
+      const saved = commitState(next);
       setNotice({
-        tone: "success",
-        message: `${familyLabel(family)} restored / original IN ${formatClock(
-          family.enteredAt,
-        )} / ${currentPax(next)} inside`,
+        tone: saved ? "success" : "error",
+        message: saved
+          ? `${familyLabel(family)} restored / original IN ${formatClock(
+              family.enteredAt,
+            )} / ${currentPax(next)} inside`
+          : "Restore was not recorded because this phone could not save it.",
       });
-      vibrate();
+      if (saved) vibrate();
+    } catch (error) {
+      reportActionError(error);
+    }
+  }
+
+  function handleDeleteRecent(family: Family) {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = deleteRecentLocalFamily(current, family.id, Date.now());
+      const saved = commitState(next, { mirrorToBackup: true });
+      setNotice({
+        tone: saved ? "success" : "error",
+        message: saved
+          ? `${familyLabel(family)} OUT record permanently deleted from this phone`
+          : "The record could not be deleted from phone storage. Try again.",
+      });
+      if (saved) vibrate();
     } catch (error) {
       reportActionError(error);
     }
   }
 
   function handleStartFresh() {
-    const next = createInitialState(now, crypto.randomUUID());
+    const next = createInitialState(Date.now(), crypto.randomUUID());
     try {
       const serialized = serializeLocalState(next);
       window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
@@ -722,6 +1205,9 @@ export default function PlayPotApp() {
     return (
       <main className="guest-screen">
         <section className="guest-card" aria-labelledby="guest-title">
+          <div className="guest-theme-row">
+            <ThemeToggle theme={theme} onToggle={handleThemeToggle} />
+          </div>
           <div className="brand-mark">PP</div>
           <span className="guest-kicker">STAFF GUEST ACCESS</span>
           <h1 id="guest-title">PLAY POT</h1>
@@ -813,6 +1299,16 @@ export default function PlayPotApp() {
   const restoreProjectedPax = restoreCandidate
     ? paxInside + familyPax(restoreCandidate)
     : paxInside;
+  const editProjectedPax = editCandidate
+    ? paxInside -
+      familyPax(editCandidate.family) +
+      editCandidate.adults +
+      editCandidate.children
+    : paxInside;
+  const nextDueFamily = nextDueLocalFamily(state);
+  const nextDueTimer = nextDueFamily
+    ? timerState(nextDueFamily, now)
+    : null;
   const busy = Boolean(pending);
 
   return (
@@ -820,7 +1316,10 @@ export default function PlayPotApp() {
       <header className="status-header">
         <div className="brand-row">
           <h1>PLAY POT</h1>
-          <span className="live-label">THIS PHONE / LIVE</span>
+          <div className="brand-actions">
+            <span className="live-label">THIS PHONE / LIVE</span>
+            <ThemeToggle theme={theme} onToggle={handleThemeToggle} />
+          </div>
         </div>
 
         <div className="capacity-row">
@@ -837,6 +1336,23 @@ export default function PlayPotApp() {
             <span>{paxInside <= CAPACITY ? "TO TARGET" : "TO HARD MAX"}</span>
           </div>
         </div>
+
+        {nextDueFamily && nextDueTimer ? (
+          <div
+            className={`next-due ${
+              nextDueTimer.overdue ? "next-due-overdue" : ""
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <span>NEXT DUE</span>
+            <strong>
+              {familyLabel(nextDueFamily)}
+              {nextDueFamily.visual ? ` · ${nextDueFamily.visual}` : ""}
+            </strong>
+            <em>{nextDueTimer.label}</em>
+          </div>
+        ) : null}
 
         {aboveHardMaxBy ? (
           <div className="over-capacity-alert" role="alert">
@@ -857,7 +1373,12 @@ export default function PlayPotApp() {
         ) : null}
         {unsaved ? (
           <div className="storage-alert" role="alert">
-            NOT SAVED ON THIS PHONE / KEEP THIS SCREEN OPEN
+            PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
+          </div>
+        ) : null}
+        {isOffline ? (
+          <div className="offline-status" role="status">
+            OFFLINE / SAVING ON THIS PHONE
           </div>
         ) : null}
       </header>
@@ -889,7 +1410,7 @@ export default function PlayPotApp() {
 
             <div className="quick-details">
               <label className="field-label" htmlFor="visual-input">
-                Visual <span>optional / 2-4 words</span>
+                Visual <span>recommended / no names</span>
               </label>
               <input
                 id="visual-input"
@@ -933,8 +1454,11 @@ export default function PlayPotApp() {
 
             <button
               type="button"
-              className={`commit-family-button ${canFlex ? "commit-overflow" : ""}`}
-              disabled={busy || (!fits && !canFlex)}
+              className={`commit-family-button ${
+                canFlex ? "commit-overflow" : ""
+              } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
+              disabled={busy || entryLocked || (!fits && !canFlex)}
+              aria-busy={entryLocked}
               onClick={(event) => {
                 if (canFlex) {
                   confirmationReturnFocusRef.current = event.currentTarget;
@@ -943,7 +1467,11 @@ export default function PlayPotApp() {
                 } else handleAdd();
               }}
             >
-              {fits
+              {entryLocked
+                ? entryRecorded
+                  ? "RECORDED ✓"
+                  : "PLEASE WAIT..."
+                : fits
                 ? `ENTER FAMILY / ${selectedPax} PAX`
                 : canFlex
                   ? `FLEX ENTRY / RECORD ${projectedPax} OF ${FLEX_CAPACITY}`
@@ -960,6 +1488,73 @@ export default function PlayPotApp() {
             <span className="section-count">{activeFamilies.length} FAMILIES</span>
           </div>
 
+          {recentlyOut.length ? (
+            <section
+              className="recent-out-section"
+              aria-label="Recently OUT families"
+            >
+              <details>
+                <summary>
+                  <span>
+                    <strong>Recently OUT</strong>
+                    <em>{recentlyOut.length}</em>
+                  </span>
+                  <small>Recovery available for 15 min</small>
+                </summary>
+                <div className="recent-out-list">
+                  {recentlyOut.map((family) => (
+                    <article className="recent-out-card" key={family.id}>
+                      <div className="recent-out-main">
+                        <div>
+                          <strong>{familyLabel(family)}</strong>
+                          <span>
+                            {family.adults}A {family.children}C /{" "}
+                            {familyPax(family)} PAX
+                          </span>
+                        </div>
+                        <p>{family.visual || "No visual recorded"}</p>
+                      </div>
+                      <div className="recent-out-times">
+                        <span>IN {formatClock(family.enteredAt)}</span>
+                        <span>OUT {formatClock(family.departedAt)}</span>
+                      </div>
+                      <div className="recent-out-actions">
+                        <button
+                          type="button"
+                          className="restore-button"
+                          aria-label={`Restore ${familyLabel(family)}`}
+                          disabled={busy}
+                          onClick={(event) => {
+                            confirmationReturnFocusRef.current =
+                              event.currentTarget;
+                            confirmationHandledRef.current = false;
+                            setRestoreCandidate(family);
+                          }}
+                        >
+                          RESTORE
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-recent-button"
+                          aria-label={`Delete ${familyLabel(family)} OUT record`}
+                          disabled={busy}
+                          onClick={(event) => {
+                            confirmationReturnFocusRef.current =
+                              event.currentTarget;
+                            confirmationHandledRef.current = false;
+                            setDeleteCandidate(family);
+                          }}
+                        >
+                          DELETE
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            </section>
+          ) : null}
+
           <div className="family-list">
             {activeFamilies.length ? (
               activeFamilies.map((family) => (
@@ -967,19 +1562,27 @@ export default function PlayPotApp() {
                   key={family.id}
                   family={family}
                   now={now}
+                  paxInside={paxInside}
                   disabled={busy}
                   onOut={(trigger) => {
                     confirmationReturnFocusRef.current = trigger;
                     confirmationHandledRef.current = false;
                     setOutCandidate(family);
                   }}
-                  onEdit={(adults, children, nextVisual, timeLimitMinutes) =>
-                    handleEdit(
+                  onEdit={(
+                    adults,
+                    children,
+                    nextVisual,
+                    timeLimitMinutes,
+                    trigger,
+                  ) =>
+                    requestEdit(
                       family,
                       adults,
                       children,
                       nextVisual,
                       timeLimitMinutes,
+                      trigger,
                     )
                   }
                 />
@@ -992,56 +1595,12 @@ export default function PlayPotApp() {
             )}
           </div>
         </section>
-
-        {recentlyOut.length ? (
-          <section className="recent-out-section" aria-label="Recently OUT families">
-            <details>
-              <summary>
-                <span>
-                  <strong>Recently OUT</strong>
-                  <em>{recentlyOut.length}</em>
-                </span>
-                <small>Kept on this phone for 15 min</small>
-              </summary>
-              <div className="recent-out-list">
-                {recentlyOut.map((family) => (
-                  <article className="recent-out-card" key={family.id}>
-                    <div className="recent-out-main">
-                      <div>
-                        <strong>{familyLabel(family)}</strong>
-                        <span>
-                          {family.adults}A {family.children}C / {familyPax(family)} PAX
-                        </span>
-                      </div>
-                      <p>{family.visual || "No visual recorded"}</p>
-                    </div>
-                    <div className="recent-out-times">
-                      <span>IN {formatClock(family.enteredAt)}</span>
-                      <span>OUT {formatClock(family.departedAt)}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="restore-button"
-                      disabled={busy}
-                      onClick={(event) => {
-                        confirmationReturnFocusRef.current = event.currentTarget;
-                        confirmationHandledRef.current = false;
-                        setRestoreCandidate(family);
-                      }}
-                    >
-                      RESTORE
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </details>
-          </section>
-        ) : null}
       </div>
 
       {outCandidate ? (
         <div className="confirm-overlay">
           <section
+            ref={confirmationDialogRef}
             className="confirm-dialog"
             role="alertdialog"
             aria-modal="true"
@@ -1084,6 +1643,7 @@ export default function PlayPotApp() {
       {confirmFlex ? (
         <div className="confirm-overlay">
           <section
+            ref={confirmationDialogRef}
             className="confirm-dialog confirm-dialog-overflow"
             role="alertdialog"
             aria-modal="true"
@@ -1124,6 +1684,7 @@ export default function PlayPotApp() {
       {restoreCandidate ? (
         <div className="confirm-overlay">
           <section
+            ref={confirmationDialogRef}
             className={`confirm-dialog ${
               restoreProjectedPax > CAPACITY ? "confirm-dialog-overflow" : ""
             }`}
@@ -1165,6 +1726,106 @@ export default function PlayPotApp() {
                 }}
               >
                 YES, RESTORE
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteCandidate ? (
+        <div className="confirm-overlay">
+          <section
+            ref={confirmationDialogRef}
+            className="confirm-dialog confirm-dialog-delete"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-delete-title"
+            aria-describedby="confirm-delete-copy"
+          >
+            <h2 id="confirm-delete-title">
+              DELETE {familyLabel(deleteCandidate)} RECORD?
+            </h2>
+            <p id="confirm-delete-copy">
+              This permanently removes {familyLabel(deleteCandidate)}&apos;s OUT
+              record from this phone. It will not change Inside now and cannot
+              be undone.
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={cancelOpenConfirmation}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  const family = deleteCandidate;
+                  setDeleteCandidate(null);
+                  confirmationReturnFocusRef.current = null;
+                  handleDeleteRecent(family);
+                }}
+              >
+                YES, DELETE
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {editCandidate ? (
+        <div className="confirm-overlay">
+          <section
+            ref={confirmationDialogRef}
+            className="confirm-dialog confirm-dialog-overflow"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-edit-title"
+            aria-describedby="confirm-edit-copy"
+          >
+            <h2 id="confirm-edit-title">SAVE COUNT CORRECTION?</h2>
+            <p id="confirm-edit-copy">
+              {familyLabel(editCandidate.family)} changes from {familyPax(
+                editCandidate.family,
+              )} to {editCandidate.adults + editCandidate.children} pax. The
+              live total changes from {paxInside} to {editProjectedPax}.
+              {editProjectedPax > FLEX_CAPACITY
+                ? ` This records the true count, but new entry stays blocked above ${FLEX_CAPACITY}.`
+                : ` This is ${editProjectedPax - CAPACITY} above the ${CAPACITY} target.`}
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={cancelOpenConfirmation}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  const candidate = editCandidate;
+                  setEditCandidate(null);
+                  confirmationReturnFocusRef.current = null;
+                  handleEdit(
+                    candidate.family,
+                    candidate.adults,
+                    candidate.children,
+                    candidate.visual,
+                    candidate.timeLimitMinutes,
+                  );
+                }}
+              >
+                YES, SAVE
               </button>
             </div>
           </section>

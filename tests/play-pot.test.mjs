@@ -42,6 +42,7 @@ test("keeps all operational data on one device", async () => {
   const [
     client,
     localCore,
+    offlineAccess,
     css,
     layout,
     readme,
@@ -56,6 +57,7 @@ test("keeps all operational data on one device", async () => {
   ] = await Promise.all([
     readFile(new URL("../app/play-pot-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/play-pot-local.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/offline-access.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
@@ -74,16 +76,39 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /THIS PHONE \/ LIVE/);
   assert.match(client, /ENTRY BLOCKED/);
   assert.match(client, /className="out-button"/);
-  assert.match(client, /<summary>Edit<\/summary>/);
+  assert.match(
+    client,
+    /<summary aria-label=\{`Edit \$\{familyLabel\(family\)\}`\}>Edit<\/summary>/,
+  );
   assert.match(client, /timeLimitMinutes} MIN REACHED/);
   assert.match(client, /FLEX ENTRY/);
   assert.match(client, /TARGET/);
   assert.match(client, /HARD MAX/);
   assert.match(client, /Recently OUT/);
   assert.match(client, /RESTORE/);
+  assert.match(client, /YES, DELETE/);
+  assert.match(client, /deleteRecentLocalFamily/);
+  assert.match(client, /ENTRY_LOCK_MILLISECONDS = 700/);
+  assert.match(client, /RECORDED ✓/);
+  assert.match(client, /NEXT DUE/);
+  assert.match(client, /OFFLINE \/ SAVING ON THIS PHONE/);
+  assert.match(client, /PLAY_POT_OFFLINE_STATUS/);
+  assert.match(client, /updateViaCache: "none"/);
+  assert.match(client, /play-pot\.theme\.v1/);
+  assert.match(client, /<ThemeToggle/);
+  assert.match(client, /-5 MIN/);
+  assert.match(client, /\+5 MIN/);
+  assert.match(client, /LIVE TOTAL AFTER SAVE/);
+  assert.match(client, /SAVE COUNT CORRECTION/);
+  assert.match(client, /Recovery available for 15 min/);
+  assert.doesNotMatch(client, /deletes in \d|delete(?:s|d)? in \{?/i);
   assert.match(
     client,
     /className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, OUT\s*</,
+  );
+  assert.match(
+    client,
+    /confirm-delete-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE\s*</,
   );
   assert.match(client, /YES, ENTER/);
   assert.doesNotMatch(client, />\s*INSTALL APP\s*</);
@@ -97,12 +122,16 @@ test("keeps all operational data on one device", async () => {
   assert.match(localCore, /recentOutFamilies/);
   assert.match(localCore, /purgeExpiredCompletedFamilies/);
   assert.match(localCore, /restoreRecentLocalFamily/);
+  assert.match(localCore, /deleteRecentLocalFamily/);
   assert.match(localCore, /play-pot\.device-state\.v2/);
   assert.match(client, /LEGACY_LOCAL_STORAGE_KEY/);
   assert.match(client, /purgeExpiredCompletedFamilies\(previous, savedAt\)/);
   assert.match(client, /removeItem\(LEGACY_LOCAL_STORAGE_BACKUP_KEY\)/);
+  assert.match(offlineAccess, /OFFLINE_ACCESS_MILLISECONDS = 12 \* 60 \* 60_000/);
+  assert.match(offlineAccess, /nextSingaporeMidnight/);
 
-  const removedConcepts = /waiting|waitlist|queue|fifo|ask first|can enter now|api\/state/i;
+  const removedConcepts =
+    /waitlist|queue|fifo|ask first|can enter now|waiting (?:list|family|queue)|api\/state/i;
   for (const source of [client, localCore, css, layout, readme, serviceWorker]) {
     assert.doesNotMatch(source, removedConcepts);
   }
@@ -133,7 +162,87 @@ test("keeps all operational data on one device", async () => {
     ["192x192", "512x512"],
   );
   assert.match(serviceWorker, /addEventListener\("fetch"/);
-  assert.doesNotMatch(serviceWorker, /caches\./);
+  assert.match(serviceWorker, /caches\.open/);
+  assert.match(serviceWorker, /pathname\.startsWith\("\/api\/"\)/);
+  assert.doesNotMatch(serviceWorker, /skipWaiting/);
+});
+
+test("allows offline reopening for at most 12 hours and never past Singapore midnight", async () => {
+  const offline = await import(
+    new URL("../app/offline-access.ts", import.meta.url)
+  );
+
+  const morning = Date.parse("2026-08-09T01:00:00.000Z"); // 9:00am Singapore
+  const morningAccess = offline.createOfflineAccess(morning);
+  assert.deepEqual(Object.keys(morningAccess).sort(), [
+    "expiresAt",
+    "schemaVersion",
+    "singaporeDate",
+    "verifiedAt",
+  ]);
+  assert.equal(morningAccess.singaporeDate, "2026-08-09");
+  assert.equal(
+    morningAccess.expiresAt,
+    "2026-08-09T13:00:00.000Z",
+  );
+  assert.ok(
+    offline.readOfflineAccess(
+      JSON.stringify(morningAccess),
+      Date.parse(morningAccess.expiresAt) - 1,
+    ),
+  );
+  assert.equal(
+    offline.readOfflineAccess(
+      JSON.stringify(morningAccess),
+      Date.parse(morningAccess.expiresAt),
+    ),
+    null,
+  );
+
+  const evening = Date.parse("2026-08-09T12:00:00.000Z"); // 8:00pm Singapore
+  const eveningAccess = offline.createOfflineAccess(evening);
+  assert.equal(
+    eveningAccess.expiresAt,
+    "2026-08-09T16:00:00.000Z",
+  );
+  const justBeforeMidnight = Date.parse("2026-08-09T15:59:59.000Z");
+  const delayedShellAccess = offline.createOfflineAccess(justBeforeMidnight);
+  assert.equal(
+    offline.readOfflineAccess(
+      JSON.stringify(delayedShellAccess),
+      Date.parse("2026-08-09T16:00:00.000Z"),
+    ),
+    null,
+  );
+
+  assert.equal(
+    offline.readOfflineAccess(
+      JSON.stringify({ ...morningAccess, schemaVersion: 2 }),
+      morning + 1,
+    ),
+    null,
+  );
+  assert.equal(
+    offline.readOfflineAccess(
+      JSON.stringify({
+        ...morningAccess,
+        expiresAt: "2026-08-10T01:00:00.000Z",
+      }),
+      morning + 1,
+    ),
+    null,
+  );
+  assert.equal(
+    offline.readOfflineAccess(
+      JSON.stringify({
+        ...morningAccess,
+        verifiedAt: "2026-08-09T02:00:00.000Z",
+      }),
+      morning,
+    ),
+    null,
+  );
+  assert.equal(offline.readOfflineAccess("not-json", morning), null);
 });
 
 test("enforces capacity without creating an outside record", async () => {
@@ -143,6 +252,7 @@ test("enforces capacity without creating an outside record", async () => {
 
   assert.equal(core.currentPax(fresh), 0);
   assert.equal(core.spacesLeft(fresh), 15);
+  assert.equal(core.nextDueLocalFamily(fresh), null);
   assert.equal(fresh.nextFamilyNumber, 1);
 
   const first = core.addLocalFamily(
@@ -496,6 +606,156 @@ test("keeps recently OUT details for less than 15 minutes and deletes them at ex
   );
 });
 
+test("manually deletes only an available Recently OUT record without reusing its family number", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:20:00.000Z");
+  let state = core.addLocalFamily(
+    core.createInitialState(start, "manual-delete-shift"),
+    {
+      adults: 2,
+      children: 1,
+      visual: "striped shirt and orange pram",
+    },
+    "delete-this-family",
+    start,
+  );
+  state = core.addLocalFamily(
+    state,
+    { adults: 1, children: 1, visual: "blue cap" },
+    "active-family",
+    start + 1_000,
+  );
+
+  const outAt = start + 60_000;
+  const afterOut = core.markLocalFamilyOut(
+    state,
+    "delete-this-family",
+    outAt,
+  );
+  const originalNextFamilyNumber = afterOut.nextFamilyNumber;
+  const activeFamilyBeforeDelete = afterOut.families.find(
+    (family) => family.id === "active-family",
+  );
+  assert.equal(afterOut.undo.familyId, "delete-this-family");
+  assert.equal(core.currentPax(afterOut), 2);
+
+  const deletedAt = outAt + 500;
+  const deleted = core.deleteRecentLocalFamily(
+    afterOut,
+    "delete-this-family",
+    deletedAt,
+  );
+  assert.equal(deleted.revision, afterOut.revision + 1);
+  assert.equal(deleted.savedAt, new Date(deletedAt).toISOString());
+  assert.equal(deleted.nextFamilyNumber, originalNextFamilyNumber);
+  assert.equal(deleted.undo, null);
+  assert.equal(core.currentPax(deleted), 2);
+  assert.deepEqual(
+    deleted.families.find((family) => family.id === "active-family"),
+    activeFamilyBeforeDelete,
+  );
+  assert.equal(
+    deleted.families.some((family) => family.id === "delete-this-family"),
+    false,
+  );
+  assert.equal(core.recentOutFamilies(deleted, deletedAt).length, 0);
+
+  const serialized = core.serializeLocalState(deleted);
+  assert.doesNotMatch(serialized, /delete-this-family/);
+  assert.doesNotMatch(serialized, /striped shirt and orange pram/);
+
+  const withNextFamily = core.addLocalFamily(
+    deleted,
+    { adults: 1, children: 1, visual: "green tote" },
+    "next-family",
+    deletedAt + 1,
+  );
+  assert.equal(
+    withNextFamily.families.find((family) => family.id === "next-family")
+      .familyNumber,
+    originalNextFamilyNumber,
+  );
+  assert.equal(withNextFamily.nextFamilyNumber, originalNextFamilyNumber + 1);
+
+  const secondFamilyOut = core.markLocalFamilyOut(
+    afterOut,
+    "active-family",
+    outAt + 100,
+  );
+  assert.equal(secondFamilyOut.undo.familyId, "active-family");
+  const deletedOlderRecord = core.deleteRecentLocalFamily(
+    secondFamilyOut,
+    "delete-this-family",
+    outAt + 200,
+  );
+  assert.equal(deletedOlderRecord.undo.familyId, "active-family");
+  assert.equal(
+    deletedOlderRecord.undo.afterRevision,
+    deletedOlderRecord.revision,
+  );
+  const unrelatedUndoStillWorks = core.restoreLocalFamily(
+    deletedOlderRecord,
+    "active-family",
+    outAt + 300,
+  );
+  assert.equal(core.currentPax(unrelatedUndoStillWorks), 2);
+  assert.equal(
+    unrelatedUndoStillWorks.families.some(
+      (family) => family.id === "delete-this-family",
+    ),
+    false,
+  );
+
+  const restoredInside = core.restoreLocalFamily(
+    afterOut,
+    "delete-this-family",
+    outAt + 1_000,
+  );
+  const unavailableCases = [
+    {
+      state: deleted,
+      familyId: "delete-this-family",
+      now: deletedAt + 1,
+    },
+    {
+      state: afterOut,
+      familyId: "active-family",
+      now: deletedAt + 1,
+    },
+    {
+      state: restoredInside,
+      familyId: "delete-this-family",
+      now: outAt + 1_001,
+    },
+    {
+      state: afterOut,
+      familyId: "missing-family",
+      now: deletedAt + 1,
+    },
+    {
+      state: afterOut,
+      familyId: "delete-this-family",
+      now: outAt + core.RECENT_OUT_MILLISECONDS,
+    },
+  ];
+
+  for (const unavailable of unavailableCases) {
+    const beforeAttempt = core.serializeLocalState(unavailable.state);
+    assert.throws(
+      () =>
+        core.deleteRecentLocalFamily(
+          unavailable.state,
+          unavailable.familyId,
+          unavailable.now,
+        ),
+      (error) =>
+        error.code === "delete_unavailable" &&
+        /no longer available to delete/i.test(error.message),
+    );
+    assert.equal(core.serializeLocalState(unavailable.state), beforeAttempt);
+  }
+});
+
 test("restores a recent factual OUT after quick undo expires, even above 20", async () => {
   const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
   const start = Date.parse("2026-08-07T09:30:00.000Z");
@@ -696,6 +956,29 @@ test("edits each family time limit without changing its entry time", async () =>
     core.readLocalState(core.serializeLocalState(extended), start + 1_000),
     extended,
   );
+
+  const withLaterFamily = core.addLocalFamily(
+    extended,
+    { adults: 1, children: 1, visual: "red stroller" },
+    "timer-family-later",
+    start + 2 * 60_000,
+  );
+  assert.equal(
+    core.nextDueLocalFamily(withLaterFamily).id,
+    "timer-family-later",
+  );
+  const tiedDueTimes = core.editLocalFamily(
+    withLaterFamily,
+    "timer-family-later",
+    {
+      adults: 1,
+      children: 1,
+      visual: "red stroller",
+      timeLimitMinutes: 18,
+    },
+    start + 2 * 60_000 + 1_000,
+  );
+  assert.equal(core.nextDueLocalFamily(tiedDueTimes).id, "timer-family");
 
   const decreased = core.editLocalFamily(
     extended,
