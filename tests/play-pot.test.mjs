@@ -78,6 +78,13 @@ test("keeps all operational data on one device", async () => {
     client,
     /<summary aria-label=\{`Edit \$\{familyLabel\(family\)\}`\}>Edit<\/summary>/,
   );
+  assert.match(client, /return `#\$\{family\.familyNumber\}`/);
+  assert.match(
+    client,
+    /\{familyLabel\(family\)\} \| \{familyPax\(family\)\} PAX/,
+  );
+  assert.match(client, /family\.adults === 1 \? "ADULT" : "ADULTS"/);
+  assert.match(client, /family\.children === 1 \? "CHILD" : "CHILDREN"/);
   assert.match(client, /timeLimitMinutes} MIN REACHED/);
   assert.doesNotMatch(client, /FLEX MODE|FLEX ENTRY|OVER TARGET|TO HARD MAX/);
   assert.doesNotMatch(client, /FLEX \$\{totalInside\}/);

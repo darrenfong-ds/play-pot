@@ -75,7 +75,15 @@ function formatClock(value: string | null) {
 }
 
 function familyLabel(family: Family) {
-  return `F${family.familyNumber}`;
+  return `#${family.familyNumber}`;
+}
+
+function familyBreakdown(family: Family) {
+  const adults = `${family.adults} ${family.adults === 1 ? "ADULT" : "ADULTS"}`;
+  const children = `${family.children} ${
+    family.children === 1 ? "CHILD" : "CHILDREN"
+  }`;
+  return `${adults}, ${children}`;
 }
 
 function ThemeToggle({
@@ -301,9 +309,11 @@ function ActiveFamilyCard({
     <article className={`family-card ${timer.overdue ? "family-card-due" : ""}`}>
       <div className="family-main">
         <div className="family-id-block">
-          <span className="family-id">{familyLabel(family)}</span>
+          <span className="family-id">
+            {familyLabel(family)} | {familyPax(family)} PAX
+          </span>
           <span className="family-pax">
-            {family.adults}A {family.children}C / {familyPax(family)} PAX
+            {familyBreakdown(family)}
           </span>
         </div>
         <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
