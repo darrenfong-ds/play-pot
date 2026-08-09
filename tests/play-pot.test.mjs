@@ -97,6 +97,12 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /\/ \{CAPACITY\} PAX/);
   assert.match(
     client,
+    /paxInside >= CAPACITY \? "capacity-full" : "capacity-safe"/,
+  );
+  assert.match(css, /\.capacity-number\.capacity-safe strong/);
+  assert.match(css, /\.capacity-number\.capacity-full strong/);
+  assert.match(
+    client,
     /slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"/,
   );
   assert.match(client, /MAX PAX/);

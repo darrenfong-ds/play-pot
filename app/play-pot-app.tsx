@@ -1110,7 +1110,11 @@ export default function PlayPotApp() {
         </div>
 
         <div className="capacity-row">
-          <div className="capacity-number">
+          <div
+            className={`capacity-number ${
+              paxInside >= CAPACITY ? "capacity-full" : "capacity-safe"
+            }`}
+          >
             <strong>{paxInside}</strong>
             <span>/ {CAPACITY} PAX</span>
           </div>

@@ -10,6 +10,8 @@
   --field-line: #879493;
   --header: #12313a;
   --header-soft: #214852;
+  --capacity-safe: #63e6aa;
+  --capacity-full: #ff8178;
   --aqua: #5be0cc;
   --teal: #0b7d72;
   --teal-fill: #0b746b;
@@ -36,6 +38,8 @@ html[data-theme="dark"] {
   --field-line: #5f7478;
   --header: #0a1518;
   --header-soft: #1c3439;
+  --capacity-safe: #72e8b3;
+  --capacity-full: #ff9189;
   --aqua: #73e4d1;
   --teal: #73e4d1;
   --teal-fill: #176f67;
@@ -268,6 +272,14 @@ html[data-theme="dark"] .theme-toggle-orb {
   font-size: clamp(2.7rem, 13vw, 4.1rem);
   line-height: 0.9;
   letter-spacing: -0.075em;
+}
+
+.capacity-number.capacity-safe strong {
+  color: var(--capacity-safe);
+}
+
+.capacity-number.capacity-full strong {
+  color: var(--capacity-full);
 }
 
 .capacity-number span {
