@@ -159,12 +159,10 @@ function Stepper({
 
 function FamilyEditor({
   family,
-  paxInside,
   onSave,
   disabled,
 }: {
   family: Family;
-  paxInside: number;
   onSave: (
     adults: number,
     children: number,
@@ -179,8 +177,6 @@ function FamilyEditor({
   const [children, setChildren] = useState(family.children);
   const [visual, setVisual] = useState(family.visual);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(family.timeLimitMinutes);
-  const projectedPax =
-    paxInside - familyPax(family) + adults + children;
   const changed =
     adults !== family.adults ||
     children !== family.children ||
@@ -255,49 +251,6 @@ function FamilyEditor({
             +
           </button>
         </div>
-        <div className="quick-time-actions" aria-label="Quick time adjustments">
-          <button
-            type="button"
-            disabled={timeLimitMinutes <= 1}
-            onClick={() =>
-              setTimeLimitMinutes((minutes) => Math.max(1, minutes - 5))
-            }
-          >
-            -5 MIN
-          </button>
-          <button
-            type="button"
-            disabled={timeLimitMinutes === DEFAULT_TIME_LIMIT_MINUTES}
-            onClick={() => setTimeLimitMinutes(DEFAULT_TIME_LIMIT_MINUTES)}
-          >
-            RESET 15
-          </button>
-          <button
-            type="button"
-            disabled={timeLimitMinutes >= MAX_TIME_LIMIT_MINUTES}
-            onClick={() =>
-              setTimeLimitMinutes((minutes) =>
-                Math.min(MAX_TIME_LIMIT_MINUTES, minutes + 5),
-              )
-            }
-          >
-            +5 MIN
-          </button>
-        </div>
-        <div
-          className={`edit-projection ${
-            projectedPax > FLEX_CAPACITY
-              ? "edit-projection-critical"
-              : projectedPax > CAPACITY
-                ? "edit-projection-flex"
-                : ""
-          }`}
-        >
-          <span>LIVE TOTAL AFTER SAVE</span>
-          <strong>
-            {paxInside} → {projectedPax}
-          </strong>
-        </div>
         <div className="editor-actions">
           <button className="cancel-correction" type="button" onClick={resetAndClose}>
             CANCEL
@@ -327,14 +280,12 @@ function FamilyEditor({
 function ActiveFamilyCard({
   family,
   now,
-  paxInside,
   disabled,
   onOut,
   onEdit,
 }: {
   family: Family;
   now: number;
-  paxInside: number;
   disabled: boolean;
   onOut: (trigger: HTMLButtonElement) => void;
   onEdit: (
@@ -377,7 +328,6 @@ function ActiveFamilyCard({
         <FamilyEditor
           key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
           family={family}
-          paxInside={paxInside}
           disabled={disabled}
           onSave={onEdit}
         />
@@ -1388,7 +1338,6 @@ export default function PlayPotApp() {
                   key={family.id}
                   family={family}
                   now={now}
-                  paxInside={paxInside}
                   disabled={busy}
                   onOut={(trigger) => {
                     confirmationReturnFocusRef.current = trigger;

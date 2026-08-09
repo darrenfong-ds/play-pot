@@ -726,64 +726,6 @@ html[data-theme="dark"] .next-due > span:first-child {
   white-space: nowrap;
 }
 
-.quick-time-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.4rem;
-}
-
-.quick-time-actions button {
-  min-height: 44px;
-  padding: 0.42rem 0.28rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-soft);
-  color: var(--ink);
-  font-size: 0.67rem;
-  font-weight: 950;
-  letter-spacing: 0.025em;
-}
-
-.edit-projection {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.58rem 0.68rem;
-  border: 1px solid var(--teal);
-  border-radius: 11px;
-  background: var(--green-soft);
-}
-
-.edit-projection span {
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 950;
-  letter-spacing: 0.055em;
-}
-
-.edit-projection strong {
-  flex: 0 0 auto;
-  font-size: 0.9rem;
-  font-weight: 950;
-}
-
-.edit-projection-flex {
-  border-color: var(--amber);
-  background: var(--amber-soft);
-}
-
-.edit-projection-critical {
-  border-color: var(--coral);
-  background: var(--red-soft);
-  color: var(--coral-dark);
-}
-
-.edit-projection-critical span {
-  color: var(--coral-dark);
-}
-
 .editor-actions {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);

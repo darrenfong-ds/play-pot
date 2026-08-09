@@ -91,9 +91,12 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /NEXT DUE/);
   assert.match(client, /play-pot\.theme\.v1/);
   assert.match(client, /<ThemeToggle/);
-  assert.match(client, /-5 MIN/);
-  assert.match(client, /\+5 MIN/);
-  assert.match(client, /LIVE TOTAL AFTER SAVE/);
+  assert.doesNotMatch(client, /-5 MIN/);
+  assert.doesNotMatch(client, /RESET 15/);
+  assert.doesNotMatch(client, /\+5 MIN/);
+  assert.doesNotMatch(client, /LIVE TOTAL AFTER SAVE/);
+  assert.match(client, /Decrease time limit by 1 minute/);
+  assert.match(client, /Extend time limit by 1 minute/);
   assert.match(client, /SAVE COUNT CORRECTION/);
   assert.match(client, /Recovery available for 15 min/);
   assert.doesNotMatch(client, /deletes in \d|delete(?:s|d)? in \{?/i);
