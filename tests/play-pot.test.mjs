@@ -76,21 +76,31 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /className="out-button"/);
   assert.match(client, /<summary>Edit<\/summary>/);
   assert.match(client, /timeLimitMinutes} MIN REACHED/);
-  assert.match(client, /OVERFLOW OPTION/);
+  assert.match(client, /FLEX ENTRY/);
+  assert.match(client, /TARGET/);
+  assert.match(client, /HARD MAX/);
+  assert.match(client, /Recently OUT/);
+  assert.match(client, /RESTORE/);
   assert.match(
     client,
     /className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, OUT\s*</,
   );
-  assert.match(client, /YES, ALLOW/);
+  assert.match(client, /YES, ENTER/);
   assert.doesNotMatch(client, />\s*INSTALL APP\s*</);
   assert.doesNotMatch(client, />\s*LOCK\s*</);
   assert.doesNotMatch(client, />\s*NEW SHIFT\s*</);
   assert.match(localCore, /const CAPACITY = 15/);
-  assert.match(localCore, /const OVERFLOW_CAPACITY = 16/);
+  assert.match(localCore, /const FLEX_CAPACITY = 20/);
+  assert.match(localCore, /const RECENT_OUT_MILLISECONDS =/);
   assert.match(localCore, /DEFAULT_TIME_LIMIT_MINUTES = 15/);
-  assert.match(localCore, /projectedPax > CAPACITY && !approvedSingleOverflow/);
+  assert.match(localCore, /allowFlex/);
+  assert.match(localCore, /recentOutFamilies/);
+  assert.match(localCore, /purgeExpiredCompletedFamilies/);
+  assert.match(localCore, /restoreRecentLocalFamily/);
   assert.match(localCore, /play-pot\.device-state\.v2/);
   assert.match(client, /LEGACY_LOCAL_STORAGE_KEY/);
+  assert.match(client, /purgeExpiredCompletedFamilies\(previous, savedAt\)/);
+  assert.match(client, /removeItem\(LEGACY_LOCAL_STORAGE_BACKUP_KEY\)/);
 
   const removedConcepts = /waiting|waitlist|queue|fifo|ask first|can enter now|api\/state/i;
   for (const source of [client, localCore, css, layout, readme, serviceWorker]) {
@@ -171,64 +181,138 @@ test("enforces capacity without creating an outside record", async () => {
   assert.equal(full.nextFamilyNumber, 3);
 });
 
-test("permits only an explicitly confirmed one-person overflow", async () => {
+test("requires explicit flex approval above 15 and never admits above 20", async () => {
   const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
   const start = Date.parse("2026-08-07T07:00:00.000Z");
+
+  assert.equal(core.CAPACITY, 15);
+  assert.equal(core.FLEX_CAPACITY, 20);
+  assert.equal(core.RECENT_OUT_MILLISECONDS, 15 * 60_000);
+
+  const atThirteen = core.addLocalFamily(
+    core.createInitialState(start, "target-shift"),
+    { adults: 12, children: 1, visual: "large family" },
+    "target-family",
+    start,
+  );
+  const atTarget = core.addLocalFamily(
+    atThirteen,
+    { adults: 1, children: 1, visual: "blue cap" },
+    "target-fifteen",
+    start + 1_000,
+  );
+  assert.equal(core.currentPax(atTarget), 15);
+
   const atFourteen = core.addLocalFamily(
-    core.createInitialState(start, "overflow-shift"),
+    core.createInitialState(start, "flex-shift"),
     { adults: 13, children: 1, visual: "grey stroller" },
     "large-family",
     start,
   );
   assert.equal(core.currentPax(atFourteen), 14);
 
-  const beforeUnapprovedEntry = core.serializeLocalState(atFourteen);
+  const beforeUnapprovedSixteen = core.serializeLocalState(atFourteen);
   assert.throws(
     () =>
       core.addLocalFamily(
         atFourteen,
         { adults: 1, children: 1, visual: "red cap" },
-        "overflow-family",
+        "flex-sixteen",
         start + 1_000,
       ),
     (error) => error.code === "capacity_exceeded",
   );
-  assert.equal(core.serializeLocalState(atFourteen), beforeUnapprovedEntry);
+  assert.equal(core.serializeLocalState(atFourteen), beforeUnapprovedSixteen);
   assert.equal(atFourteen.nextFamilyNumber, 2);
 
-  const overflow = core.addLocalFamily(
+  const atSixteen = core.addLocalFamily(
     atFourteen,
     { adults: 1, children: 1, visual: "red cap" },
-    "overflow-family",
+    "flex-sixteen",
     start + 1_000,
-    { allowOverflow: true },
+    { allowFlex: true },
   );
-  assert.equal(core.currentPax(overflow), 16);
-  assert.equal(core.spacesLeft(overflow), -1);
-  assert.equal(overflow.nextFamilyNumber, 3);
+  assert.equal(core.currentPax(atSixteen), 16);
+  assert.equal(core.spacesLeft(atSixteen), -1);
+  assert.equal(atSixteen.nextFamilyNumber, 3);
 
-  for (const allowOverflow of [false, true]) {
+  const beforeUnapprovedEighteen = core.serializeLocalState(atSixteen);
+  assert.throws(
+    () =>
+      core.addLocalFamily(
+        atSixteen,
+        { adults: 1, children: 1, visual: "yellow bag" },
+        "flex-eighteen-unapproved",
+        start + 2_000,
+      ),
+    (error) => error.code === "capacity_exceeded",
+  );
+  assert.equal(core.serializeLocalState(atSixteen), beforeUnapprovedEighteen);
+
+  const atEighteen = core.addLocalFamily(
+    atSixteen,
+    { adults: 1, children: 1, visual: "yellow bag" },
+    "flex-eighteen",
+    start + 2_000,
+    { allowFlex: true },
+  );
+  assert.equal(core.currentPax(atEighteen), 18);
+
+  const atTwenty = core.addLocalFamily(
+    atEighteen,
+    { adults: 1, children: 1, visual: "green tote" },
+    "flex-twenty",
+    start + 3_000,
+    { allowFlex: true },
+  );
+  assert.equal(core.currentPax(atTwenty), 20);
+  assert.equal(core.spacesLeft(atTwenty), -5);
+
+  const beforeAboveHardMax = core.serializeLocalState(atTwenty);
+  for (const allowFlex of [false, true]) {
     assert.throws(
       () =>
         core.addLocalFamily(
-          overflow,
-          { adults: 1, children: 1, visual: "" },
-          `blocked-${allowOverflow}`,
-          start + 2_000,
-          { allowOverflow },
+          atTwenty,
+          { adults: 1, children: 1, visual: "blocked" },
+          `blocked-${allowFlex}`,
+          start + 4_000,
+          { allowFlex },
         ),
       (error) => error.code === "capacity_exceeded",
     );
+    assert.equal(core.serializeLocalState(atTwenty), beforeAboveHardMax);
   }
 
-  const afterOut = core.markLocalFamilyOut(overflow, "overflow-family", start + 3_000);
-  assert.equal(core.currentPax(afterOut), 14);
-  const restored = core.restoreLocalFamily(afterOut, "overflow-family", start + 4_000);
-  assert.equal(core.currentPax(restored), 16);
-  assert.equal(
-    core.insideFamilies(restored).find((family) => family.id === "overflow-family")
-      .timeLimitMinutes,
-    15,
+  const fresh = core.createInitialState(start, "single-family-shift");
+  assert.throws(
+    () =>
+      core.addLocalFamily(
+        fresh,
+        { adults: 19, children: 1, visual: "large group" },
+        "twenty-unapproved",
+        start,
+      ),
+    (error) => error.code === "capacity_exceeded",
+  );
+  const singleFamilyAtTwenty = core.addLocalFamily(
+    fresh,
+    { adults: 19, children: 1, visual: "large group" },
+    "twenty-approved",
+    start,
+    { allowFlex: true },
+  );
+  assert.equal(core.currentPax(singleFamilyAtTwenty), 20);
+  assert.throws(
+    () =>
+      core.addLocalFamily(
+        fresh,
+        { adults: 20, children: 1, visual: "too large" },
+        "twenty-one",
+        start,
+        { allowFlex: true },
+      ),
+    (error) => error.code === "invalid_count",
   );
 });
 
@@ -307,6 +391,216 @@ test("OUT, undo, corrections, and new shifts preserve the right facts", async ()
   assert.equal(newShift.shift.id, "shift-two");
   assert.equal(newShift.nextFamilyNumber, 1);
   assert.deepEqual(newShift.families, []);
+});
+
+test("keeps recently OUT details for less than 15 minutes and deletes them at expiry", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:00:00.000Z");
+  const firstEntry = core.addLocalFamily(
+    core.createInitialState(start, "recent-out-shift"),
+    { adults: 1, children: 2, visual: "red cap child" },
+    "departed-family",
+    start,
+  );
+  const withActiveFamily = core.addLocalFamily(
+    firstEntry,
+    { adults: 1, children: 1, visual: "blue stroller" },
+    "active-family",
+    start + 1_000,
+  );
+  const withLaterDeparture = core.addLocalFamily(
+    withActiveFamily,
+    { adults: 1, children: 1, visual: "green tote" },
+    "later-departure",
+    start + 2_000,
+  );
+  const outAt = start + 60_000;
+  const afterOut = core.markLocalFamilyOut(
+    withLaterDeparture,
+    "departed-family",
+    outAt,
+  );
+  const laterOutAt = outAt + 5 * 60_000;
+  const afterLaterOut = core.markLocalFamilyOut(
+    afterOut,
+    "later-departure",
+    laterOutAt,
+  );
+  const expiresAt = outAt + core.RECENT_OUT_MILLISECONDS;
+
+  assert.deepEqual(
+    core.recentOutFamilies(afterOut, outAt).map((family) => family.id),
+    ["departed-family"],
+  );
+  assert.equal(
+    core.recentOutFamilies(afterOut, expiresAt - 1).length,
+    1,
+  );
+  assert.equal(core.recentOutFamilies(afterOut, expiresAt).length, 0);
+  assert.deepEqual(
+    core.recentOutFamilies(afterLaterOut, laterOutAt).map((family) => family.id),
+    ["later-departure", "departed-family"],
+  );
+  assert.deepEqual(
+    core.recentOutFamilies(afterLaterOut, expiresAt).map((family) => family.id),
+    ["later-departure"],
+  );
+
+  const beforeExpiry = core.purgeExpiredCompletedFamilies(afterOut, expiresAt - 1);
+  assert.strictEqual(beforeExpiry, afterOut);
+  assert.equal(
+    beforeExpiry.families.some((family) => family.id === "departed-family"),
+    true,
+  );
+
+  const expired = core.purgeExpiredCompletedFamilies(afterLaterOut, expiresAt);
+  assert.equal(
+    expired.families.some((family) => family.id === "departed-family"),
+    false,
+  );
+  assert.equal(
+    expired.families.some(
+      (family) => family.id === "later-departure" && family.status === "completed",
+    ),
+    true,
+  );
+  assert.equal(
+    expired.families.some(
+      (family) => family.id === "active-family" && family.status === "inside",
+    ),
+    true,
+  );
+  assert.equal(expired.nextFamilyNumber, afterLaterOut.nextFamilyNumber);
+  assert.doesNotMatch(core.serializeLocalState(expired), /red cap child/);
+
+  const expiredOnly = core.purgeExpiredCompletedFamilies(afterOut, expiresAt);
+  assert.equal(expiredOnly.undo, null);
+  assert.equal(expiredOnly.revision, afterOut.revision);
+  assert.doesNotMatch(core.serializeLocalState(expiredOnly), /red cap child/);
+
+  const loadedAtExpiry = core.readLocalState(
+    core.serializeLocalState(afterLaterOut),
+    expiresAt,
+  );
+  assert.ok(loadedAtExpiry);
+  assert.equal(
+    loadedAtExpiry.families.some((family) => family.id === "departed-family"),
+    false,
+  );
+  assert.equal(
+    loadedAtExpiry.families.some((family) => family.id === "later-departure"),
+    true,
+  );
+  assert.throws(
+    () => core.restoreRecentLocalFamily(afterLaterOut, "departed-family", expiresAt),
+  );
+});
+
+test("restores a recent factual OUT after quick undo expires, even above 20", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const start = Date.parse("2026-08-07T09:30:00.000Z");
+  let state = core.addLocalFamily(
+    core.createInitialState(start, "recent-restore-shift"),
+    { adults: 1, children: 1, visual: "yellow tee kid" },
+    "wrongly-out",
+    start,
+  );
+  state = core.editLocalFamily(
+    state,
+    "wrongly-out",
+    {
+      adults: 1,
+      children: 1,
+      visual: "yellow tee kid",
+      timeLimitMinutes: 25,
+    },
+    start + 500,
+  );
+  state = core.addLocalFamily(
+    state,
+    { adults: 17, children: 1, visual: "large group" },
+    "eighteen-pax",
+    start + 1_000,
+    { allowFlex: true },
+  );
+  assert.equal(core.currentPax(state), 20);
+
+  const original = state.families.find((family) => family.id === "wrongly-out");
+  const outAt = start + 2_000;
+  const afterOut = core.markLocalFamilyOut(state, "wrongly-out", outAt);
+  assert.equal(core.currentPax(afterOut), 18);
+  assert.throws(
+    () =>
+      core.restoreLocalFamily(
+        afterOut,
+        "wrongly-out",
+        outAt + core.UNDO_MILLISECONDS + 1,
+      ),
+    (error) => error.code === "undo_unavailable",
+  );
+
+  const refilledToTwenty = core.addLocalFamily(
+    afterOut,
+    { adults: 1, children: 1, visual: "new arrival" },
+    "replacement-family",
+    outAt + core.UNDO_MILLISECONDS + 2,
+    { allowFlex: true },
+  );
+  assert.equal(core.currentPax(refilledToTwenty), 20);
+
+  const restored = core.restoreRecentLocalFamily(
+    refilledToTwenty,
+    "wrongly-out",
+    outAt + core.UNDO_MILLISECONDS + 3,
+  );
+  assert.equal(core.currentPax(restored), 22);
+  assert.equal(core.recentOutFamilies(restored, outAt + 20_000).length, 0);
+
+  const restoredFamily = core.insideFamilies(restored).find(
+    (family) => family.id === "wrongly-out",
+  );
+  assert.deepEqual(
+    {
+      id: restoredFamily.id,
+      familyNumber: restoredFamily.familyNumber,
+      adults: restoredFamily.adults,
+      children: restoredFamily.children,
+      visual: restoredFamily.visual,
+      timeLimitMinutes: restoredFamily.timeLimitMinutes,
+      createdAt: restoredFamily.createdAt,
+      enteredAt: restoredFamily.enteredAt,
+      departedAt: restoredFamily.departedAt,
+      status: restoredFamily.status,
+    },
+    {
+      id: original.id,
+      familyNumber: original.familyNumber,
+      adults: original.adults,
+      children: original.children,
+      visual: original.visual,
+      timeLimitMinutes: original.timeLimitMinutes,
+      createdAt: original.createdAt,
+      enteredAt: original.enteredAt,
+      departedAt: null,
+      status: "inside",
+    },
+  );
+
+  const beforeBlockedEntry = core.serializeLocalState(restored);
+  for (const allowFlex of [false, true]) {
+    assert.throws(
+      () =>
+        core.addLocalFamily(
+          restored,
+          { adults: 1, children: 1, visual: "blocked arrival" },
+          `blocked-after-restore-${allowFlex}`,
+          outAt + 20_001,
+          { allowFlex },
+        ),
+      (error) => error.code === "capacity_exceeded",
+    );
+    assert.equal(core.serializeLocalState(restored), beforeBlockedEntry);
+  }
 });
 
 test("round-trips valid phone state and isolates separate devices", async () => {

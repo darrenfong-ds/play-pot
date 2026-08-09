@@ -1,9 +1,10 @@
 export const CAPACITY = 15;
-export const OVERFLOW_CAPACITY = 16;
+export const FLEX_CAPACITY = 20;
 export const DEFAULT_TIME_LIMIT_MINUTES = 15;
 export const MAX_TIME_LIMIT_MINUTES = 120;
 export const PLAY_MILLISECONDS = DEFAULT_TIME_LIMIT_MINUTES * 60_000;
 export const UNDO_MILLISECONDS = 10_000;
+export const RECENT_OUT_MILLISECONDS = 15 * 60_000;
 export const LOCAL_STORAGE_KEY = "play-pot.device-state.v2";
 export const LOCAL_STORAGE_BACKUP_KEY = "play-pot.device-state.v2.backup";
 export const LEGACY_LOCAL_STORAGE_KEY = "play-pot.device-state.v1";
@@ -45,6 +46,7 @@ type LocalStateErrorCode =
   | "invalid_time_limit"
   | "capacity_exceeded"
   | "family_changed"
+  | "restore_unavailable"
   | "undo_unavailable"
   | "active_families";
 
@@ -76,11 +78,11 @@ function normalizeCounts(adults: number, children: number) {
     !Number.isSafeInteger(children) ||
     adults < 1 ||
     children < 1 ||
-    adults + children > CAPACITY
+    adults + children > FLEX_CAPACITY
   ) {
     throw new LocalStateError(
       "invalid_count",
-      `Use at least 1 adult and 1 child, with no more than ${CAPACITY} pax.`,
+      `Use at least 1 adult and 1 child, with no more than ${FLEX_CAPACITY} pax.`,
     );
   }
   return { adults, children };
@@ -151,6 +153,14 @@ function parseFamily(value: unknown, schemaVersion: 1 | 2): Family | null {
   };
 }
 
+function familyIsWithinRecentOutWindow(family: Family, now: number) {
+  return (
+    family.status === "completed" &&
+    family.departedAt !== null &&
+    Date.parse(family.departedAt) + RECENT_OUT_MILLISECONDS > now
+  );
+}
+
 export function createInitialState(
   now = Date.now(),
   shiftId = crypto.randomUUID(),
@@ -198,6 +208,11 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
   const familyNumbers = new Set(validFamilies.map((family) => family.familyNumber));
   if (ids.size !== validFamilies.length || familyNumbers.size !== validFamilies.length) return null;
 
+  const retainedFamilies = validFamilies.filter(
+    (family) =>
+      family.status === "inside" || familyIsWithinRecentOutWindow(family, now),
+  );
+
   const highestFamilyNumber = validFamilies.reduce(
     (highest, family) => Math.max(highest, family.familyNumber),
     0,
@@ -208,7 +223,7 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
   if (value.undo !== null) {
     if (!isRecord(value.undo)) return null;
     const candidate = value.undo;
-    const matchingFamily = validFamilies.find(
+    const matchingFamily = retainedFamilies.find(
       (family) => family.id === candidate.familyId && family.status === "completed",
     );
     if (
@@ -240,9 +255,12 @@ export function readLocalState(raw: string | null, now = Date.now()): PlayPotSta
       startedAt: value.shift.startedAt as string,
     },
     nextFamilyNumber,
-    families: validFamilies,
+    families: retainedFamilies,
     undo,
-    savedAt: value.savedAt as string,
+    savedAt:
+      retainedFamilies.length === validFamilies.length
+        ? (value.savedAt as string)
+        : new Date(now).toISOString(),
   };
 }
 
@@ -269,8 +287,35 @@ export function completedFamilies(state: PlayPotState) {
     .filter((family) => family.status === "completed")
     .sort(
       (left, right) =>
-        Date.parse(right.departedAt ?? "") - Date.parse(left.departedAt ?? ""),
+        Date.parse(right.departedAt ?? "") - Date.parse(left.departedAt ?? "") ||
+        right.familyNumber - left.familyNumber,
     );
+}
+
+export function recentOutFamilies(state: PlayPotState, now = Date.now()) {
+  return completedFamilies(state).filter((family) =>
+    familyIsWithinRecentOutWindow(family, now),
+  );
+}
+
+export function purgeExpiredCompletedFamilies(
+  state: PlayPotState,
+  now = Date.now(),
+): PlayPotState {
+  const families = state.families.filter(
+    (family) =>
+      family.status === "inside" || familyIsWithinRecentOutWindow(family, now),
+  );
+  if (families.length === state.families.length) return state;
+
+  const retainedIds = new Set(families.map((family) => family.id));
+  return {
+    ...state,
+    families,
+    undo:
+      state.undo && retainedIds.has(state.undo.familyId) ? state.undo : null,
+    savedAt: new Date(now).toISOString(),
+  };
 }
 
 export function currentPax(state: PlayPotState) {
@@ -279,6 +324,10 @@ export function currentPax(state: PlayPotState) {
 
 export function spacesLeft(state: PlayPotState) {
   return CAPACITY - currentPax(state);
+}
+
+export function flexSpacesLeft(state: PlayPotState) {
+  return Math.max(0, FLEX_CAPACITY - currentPax(state));
 }
 
 export function familyDueAt(family: Family) {
@@ -296,32 +345,36 @@ export function addLocalFamily(
   details: { adults: number; children: number; visual: string },
   familyId: string,
   now = Date.now(),
-  options: { allowOverflow?: boolean } = {},
+  options: { allowFlex?: boolean } = {},
 ): PlayPotState {
+  const currentState = purgeExpiredCompletedFamilies(state, now);
   const counts = normalizeCounts(details.adults, details.children);
   const pax = counts.adults + counts.children;
-  const paxBeforeEntry = currentPax(state);
+  const paxBeforeEntry = currentPax(currentState);
   const projectedPax = paxBeforeEntry + pax;
-  const approvedSingleOverflow =
-    options.allowOverflow === true &&
-    paxBeforeEntry <= CAPACITY &&
-    projectedPax === OVERFLOW_CAPACITY;
-  if (projectedPax > CAPACITY && !approvedSingleOverflow) {
+  const approvedFlexEntry =
+    options.allowFlex === true &&
+    projectedPax > CAPACITY &&
+    projectedPax <= FLEX_CAPACITY;
+  if (projectedPax > CAPACITY && !approvedFlexEntry) {
     throw new LocalStateError(
       "capacity_exceeded",
-      projectedPax === OVERFLOW_CAPACITY
-        ? `That entry would make the area ${OVERFLOW_CAPACITY} / ${CAPACITY}. Use the overflow option only if staff approves.`
-        : `That family needs ${pax} spaces. Only ${Math.max(0, spacesLeft(state))} remain.`,
+      projectedPax <= FLEX_CAPACITY
+        ? `That entry would make the area ${projectedPax} / ${CAPACITY}. Confirm flex entry first.`
+        : `That entry would exceed the hard maximum of ${FLEX_CAPACITY} pax.`,
     );
   }
-  if (!familyId.trim() || state.families.some((family) => family.id === familyId)) {
+  if (
+    !familyId.trim() ||
+    currentState.families.some((family) => family.id === familyId)
+  ) {
     throw new LocalStateError("family_changed", "That family could not be recorded safely.");
   }
 
   const timestamp = new Date(now).toISOString();
   const family: Family = {
     id: familyId,
-    familyNumber: state.nextFamilyNumber,
+    familyNumber: currentState.nextFamilyNumber,
     ...counts,
     timeLimitMinutes: DEFAULT_TIME_LIMIT_MINUTES,
     visual: normalizeVisual(details.visual),
@@ -332,10 +385,10 @@ export function addLocalFamily(
   };
 
   return {
-    ...state,
-    revision: nextRevision(state),
-    nextFamilyNumber: state.nextFamilyNumber + 1,
-    families: [...state.families, family],
+    ...currentState,
+    revision: nextRevision(currentState),
+    nextFamilyNumber: currentState.nextFamilyNumber + 1,
+    families: [...currentState.families, family],
     undo: null,
     savedAt: timestamp,
   };
@@ -346,19 +399,20 @@ export function markLocalFamilyOut(
   familyId: string,
   now = Date.now(),
 ): PlayPotState {
-  const family = state.families.find(
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const family = currentState.families.find(
     (candidate) => candidate.id === familyId && candidate.status === "inside",
   );
   if (!family) {
     throw new LocalStateError("family_changed", "That family is no longer inside.");
   }
 
-  const revision = nextRevision(state);
+  const revision = nextRevision(currentState);
   const timestamp = new Date(now).toISOString();
   return {
-    ...state,
+    ...currentState,
     revision,
-    families: state.families.map((candidate) =>
+    families: currentState.families.map((candidate) =>
       candidate.id === familyId
         ? { ...candidate, status: "completed" as const, departedAt: timestamp }
         : candidate,
@@ -377,31 +431,55 @@ export function restoreLocalFamily(
   familyId: string,
   now = Date.now(),
 ): PlayPotState {
-  const undo = state.undo;
-  const family = state.families.find(
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const undo = currentState.undo;
+  const family = currentState.families.find(
     (candidate) => candidate.id === familyId && candidate.status === "completed",
   );
   if (
     !undo ||
     undo.familyId !== familyId ||
-    undo.afterRevision !== state.revision ||
+    undo.afterRevision !== currentState.revision ||
     Date.parse(undo.expiresAt) < now ||
     !family
   ) {
     throw new LocalStateError("undo_unavailable", "That OUT action can no longer be undone.");
   }
-  if (currentPax(state) + familyPax(family) > OVERFLOW_CAPACITY) {
+  const timestamp = new Date(now).toISOString();
+  return {
+    ...currentState,
+    revision: nextRevision(currentState),
+    families: currentState.families.map((candidate) =>
+      candidate.id === familyId
+        ? { ...candidate, status: "inside" as const, departedAt: null }
+        : candidate,
+    ),
+    undo: null,
+    savedAt: timestamp,
+  };
+}
+
+export function restoreRecentLocalFamily(
+  state: PlayPotState,
+  familyId: string,
+  now = Date.now(),
+): PlayPotState {
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const family = currentState.families.find(
+    (candidate) => candidate.id === familyId && candidate.status === "completed",
+  );
+  if (!family || !familyIsWithinRecentOutWindow(family, now)) {
     throw new LocalStateError(
-      "capacity_exceeded",
-      `Undo would exceed ${OVERFLOW_CAPACITY} pax. Correct the live count first.`,
+      "restore_unavailable",
+      "That recent OUT record has already been deleted.",
     );
   }
 
   const timestamp = new Date(now).toISOString();
   return {
-    ...state,
-    revision: nextRevision(state),
-    families: state.families.map((candidate) =>
+    ...currentState,
+    revision: nextRevision(currentState),
+    families: currentState.families.map((candidate) =>
       candidate.id === familyId
         ? { ...candidate, status: "inside" as const, departedAt: null }
         : candidate,
@@ -422,7 +500,8 @@ export function editLocalFamily(
   },
   now = Date.now(),
 ): PlayPotState {
-  const family = state.families.find(
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  const family = currentState.families.find(
     (candidate) => candidate.id === familyId && candidate.status === "inside",
   );
   if (!family) {
@@ -436,9 +515,9 @@ export function editLocalFamily(
   );
   const timestamp = new Date(now).toISOString();
   return {
-    ...state,
-    revision: nextRevision(state),
-    families: state.families.map((candidate) =>
+    ...currentState,
+    revision: nextRevision(currentState),
+    families: currentState.families.map((candidate) =>
       candidate.id === familyId
         ? {
             ...candidate,
@@ -458,7 +537,8 @@ export function startLocalShift(
   shiftId: string,
   now = Date.now(),
 ): PlayPotState {
-  if (insideFamilies(state).length) {
+  const currentState = purgeExpiredCompletedFamilies(state, now);
+  if (insideFamilies(currentState).length) {
     throw new LocalStateError(
       "active_families",
       "Check every family OUT before starting a new shift.",
@@ -467,10 +547,10 @@ export function startLocalShift(
   const timestamp = new Date(now).toISOString();
   return {
     schemaVersion: 2,
-    revision: nextRevision(state),
+    revision: nextRevision(currentState),
     shift: {
       id: shiftId,
-      number: state.shift.number + 1,
+      number: currentState.shift.number + 1,
       startedAt: timestamp,
     },
     nextFamilyNumber: 1,

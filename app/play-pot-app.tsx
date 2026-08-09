@@ -10,6 +10,8 @@ import {
   editLocalFamily,
   familyDueAt,
   familyPax,
+  FLEX_CAPACITY,
+  flexSpacesLeft,
   insideFamilies,
   LEGACY_LOCAL_STORAGE_BACKUP_KEY,
   LEGACY_LOCAL_STORAGE_KEY,
@@ -17,9 +19,12 @@ import {
   LOCAL_STORAGE_KEY,
   MAX_TIME_LIMIT_MINUTES,
   markLocalFamilyOut,
-  OVERFLOW_CAPACITY,
+  purgeExpiredCompletedFamilies,
+  RECENT_OUT_MILLISECONDS,
+  recentOutFamilies,
   readLocalState,
   restoreLocalFamily,
+  restoreRecentLocalFamily,
   serializeLocalState,
   spacesLeft,
   type Family,
@@ -80,7 +85,7 @@ function Stepper({
   value,
   onChange,
   min = 1,
-  max = CAPACITY,
+  max = FLEX_CAPACITY,
 }: {
   label: string;
   value: number;
@@ -139,13 +144,13 @@ function FamilyEditor({
           <Stepper
             label="Adults"
             value={adults}
-            max={CAPACITY - children}
+            max={FLEX_CAPACITY - children}
             onChange={setAdults}
           />
           <Stepper
             label="Children"
             value={children}
-            max={CAPACITY - adults}
+            max={FLEX_CAPACITY - adults}
             onChange={setChildren}
           />
         </div>
@@ -210,7 +215,7 @@ function ActiveFamilyCard({
   family: Family;
   now: number;
   disabled: boolean;
-  onOut: () => void;
+  onOut: (trigger: HTMLButtonElement) => void;
   onEdit: (
     adults: number,
     children: number,
@@ -257,7 +262,7 @@ function ActiveFamilyCard({
           type="button"
           className="out-button"
           disabled={disabled}
-          onClick={onOut}
+          onClick={(event) => onOut(event.currentTarget)}
           aria-label={`Check ${familyLabel(family)} out`}
         >
           OUT
@@ -283,8 +288,10 @@ export default function PlayPotApp() {
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [outCandidate, setOutCandidate] = useState<Family | null>(null);
-  const [confirmOverflow, setConfirmOverflow] = useState(false);
+  const [confirmFlex, setConfirmFlex] = useState(false);
+  const [restoreCandidate, setRestoreCandidate] = useState<Family | null>(null);
   const cancelConfirmationRef = useRef<HTMLButtonElement | null>(null);
+  const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const confirmationHandledRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [installHelp, setInstallHelp] = useState("");
@@ -298,38 +305,47 @@ export default function PlayPotApp() {
 
   function commitState(next: PlayPotState) {
     const previous = stateRef.current;
+    const savedAt = Date.now();
+    const sanitizedNext = purgeExpiredCompletedFamilies(next, savedAt);
     let saved = true;
     try {
-      const serialized = serializeLocalState(next);
-      if (!readLocalState(serialized, now)) {
+      const serialized = serializeLocalState(sanitizedNext);
+      if (!readLocalState(serialized, savedAt)) {
         throw new Error("The updated phone record could not be verified.");
       }
       if (previous) {
         window.localStorage.setItem(
           LOCAL_STORAGE_BACKUP_KEY,
-          serializeLocalState(previous),
+          serializeLocalState(
+            purgeExpiredCompletedFamilies(previous, savedAt),
+          ),
         );
+      } else {
+        window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
       }
       window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_BACKUP_KEY);
       setUnsaved(false);
     } catch {
       saved = false;
       setUnsaved(true);
     }
-    showState(next);
+    showState(sanitizedNext);
     return saved;
   }
 
   function openThisPhoneState() {
+    const openedAt = Date.now();
     const currentRaw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
     const backupRaw = window.localStorage.getItem(LOCAL_STORAGE_BACKUP_KEY);
     const hasCurrentVersion = currentRaw !== null || backupRaw !== null;
-    let next = readLocalState(currentRaw);
+    let next = readLocalState(currentRaw, openedAt);
     let recovered = false;
     let migrated = false;
 
     if (!next && backupRaw !== null) {
-      next = readLocalState(backupRaw);
+      next = readLocalState(backupRaw, openedAt);
       recovered = Boolean(next);
     }
 
@@ -339,13 +355,15 @@ export default function PlayPotApp() {
         LEGACY_LOCAL_STORAGE_BACKUP_KEY,
       );
       const hasLegacyVersion = legacyRaw !== null || legacyBackupRaw !== null;
-      next = readLocalState(legacyRaw);
+      next = readLocalState(legacyRaw, openedAt);
       if (!next && legacyBackupRaw !== null) {
-        next = readLocalState(legacyBackupRaw);
+        next = readLocalState(legacyBackupRaw, openedAt);
         recovered = Boolean(next);
       }
       if (next) migrated = true;
-      else if (!hasLegacyVersion) next = createInitialState(now, crypto.randomUUID());
+      else if (!hasLegacyVersion) {
+        next = createInitialState(openedAt, crypto.randomUUID());
+      }
     }
 
     if (!next) {
@@ -362,6 +380,8 @@ export default function PlayPotApp() {
       const serialized = serializeLocalState(next);
       window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
       window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_BACKUP_KEY);
       setUnsaved(false);
     } catch {
       setUnsaved(true);
@@ -417,6 +437,36 @@ export default function PlayPotApp() {
   }, []);
 
   useEffect(() => {
+    if (!state) return;
+
+    const checkedAt = Date.now();
+    const sanitized = purgeExpiredCompletedFamilies(state, checkedAt);
+    if (sanitized !== state) {
+      const immediateCleanup = window.setTimeout(() => commitState(sanitized), 0);
+      return () => window.clearTimeout(immediateCleanup);
+    }
+
+    const recent = recentOutFamilies(state, checkedAt);
+    if (!recent.length) return;
+    const nextExpiry = Math.min(
+      ...recent.map(
+        (family) =>
+          Date.parse(family.departedAt ?? "") + RECENT_OUT_MILLISECONDS,
+      ),
+    );
+    const expiryCleanup = window.setTimeout(() => {
+      const current = stateRef.current;
+      if (!current) return;
+      const next = purgeExpiredCompletedFamilies(current, Date.now());
+      if (next !== current) commitState(next);
+    }, Math.max(0, nextExpiry - Date.now() + 25));
+
+    return () => window.clearTimeout(expiryCleanup);
+    // commitState deliberately writes both current and backup storage copies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  useEffect(() => {
     const rememberInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
@@ -457,12 +507,16 @@ export default function PlayPotApp() {
   }, [notice]);
 
   useEffect(() => {
-    if (!outCandidate && !confirmOverflow) return;
+    if (!outCandidate && !confirmFlex && !restoreCandidate) return;
     confirmationHandledRef.current = false;
     const cancelConfirmation = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOutCandidate(null);
-      setConfirmOverflow(false);
+      setConfirmFlex(false);
+      setRestoreCandidate(null);
+      const returnTarget = confirmationReturnFocusRef.current;
+      confirmationReturnFocusRef.current = null;
+      window.setTimeout(() => returnTarget?.focus(), 0);
     };
     const focusCancelButton = window.setTimeout(
       () => cancelConfirmationRef.current?.focus(),
@@ -473,7 +527,16 @@ export default function PlayPotApp() {
       window.clearTimeout(focusCancelButton);
       document.removeEventListener("keydown", cancelConfirmation);
     };
-  }, [outCandidate, confirmOverflow]);
+  }, [outCandidate, confirmFlex, restoreCandidate]);
+
+  function cancelOpenConfirmation() {
+    setOutCandidate(null);
+    setConfirmFlex(false);
+    setRestoreCandidate(null);
+    const returnTarget = confirmationReturnFocusRef.current;
+    confirmationReturnFocusRef.current = null;
+    window.setTimeout(() => returnTarget?.focus(), 0);
+  }
 
   function vibrate() {
     if ("vibrate" in navigator) navigator.vibrate(20);
@@ -530,7 +593,7 @@ export default function PlayPotApp() {
     else setInstallHelp(guidance);
   }
 
-  function handleAdd(allowOverflow = false) {
+  function handleAdd(allowFlex = false) {
     const current = stateRef.current;
     if (!current) return;
     try {
@@ -539,15 +602,18 @@ export default function PlayPotApp() {
         { adults: customAdults, children: customChildren, visual },
         crypto.randomUUID(),
         now,
-        { allowOverflow },
+        { allowFlex },
       );
       const added = insideFamilies(next).find(
         (family) => family.familyNumber === current.nextFamilyNumber,
       );
       commitState(next);
+      const totalInside = currentPax(next);
       setNotice({
         tone: "success",
-        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`,
+        message: `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${
+          totalInside > CAPACITY ? `FLEX ${totalInside} of ${FLEX_CAPACITY}` : `${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
+        }`,
       });
       setCustomAdults(1);
       setCustomChildren(1);
@@ -618,12 +684,32 @@ export default function PlayPotApp() {
     }
   }
 
+  function handleRestoreRecent(family: Family) {
+    const current = stateRef.current;
+    if (!current) return;
+    try {
+      const next = restoreRecentLocalFamily(current, family.id, now);
+      commitState(next);
+      setNotice({
+        tone: "success",
+        message: `${familyLabel(family)} restored / original IN ${formatClock(
+          family.enteredAt,
+        )} / ${currentPax(next)} inside`,
+      });
+      vibrate();
+    } catch (error) {
+      reportActionError(error);
+    }
+  }
+
   function handleStartFresh() {
     const next = createInitialState(now, crypto.randomUUID());
     try {
       const serialized = serializeLocalState(next);
       window.localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
       window.localStorage.setItem(LOCAL_STORAGE_BACKUP_KEY, serialized);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_BACKUP_KEY);
       setUnsaved(false);
     } catch {
       setUnsaved(true);
@@ -712,14 +798,21 @@ export default function PlayPotApp() {
   }
 
   const activeFamilies = insideFamilies(state);
+  const recentlyOut = recentOutFamilies(state, now);
   const paxInside = currentPax(state);
   const remaining = spacesLeft(state);
+  const toTarget = Math.max(0, remaining);
+  const toHardMax = flexSpacesLeft(state);
   const selectedPax = customAdults + customChildren;
-  const fits = paxInside <= CAPACITY && selectedPax <= remaining;
   const projectedPax = paxInside + selectedPax;
-  const canOverflow =
-    paxInside <= CAPACITY && projectedPax === OVERFLOW_CAPACITY;
-  const overCapacityBy = Math.max(0, paxInside - CAPACITY);
+  const fits = projectedPax <= CAPACITY;
+  const canFlex =
+    projectedPax > CAPACITY && projectedPax <= FLEX_CAPACITY;
+  const overTargetBy = Math.max(0, paxInside - CAPACITY);
+  const aboveHardMaxBy = Math.max(0, paxInside - FLEX_CAPACITY);
+  const restoreProjectedPax = restoreCandidate
+    ? paxInside + familyPax(restoreCandidate)
+    : paxInside;
   const busy = Boolean(pending);
 
   return (
@@ -733,17 +826,33 @@ export default function PlayPotApp() {
         <div className="capacity-row">
           <div className="capacity-number">
             <strong>{paxInside}</strong>
-            <span>/ {CAPACITY} PAX</span>
+            <span>/ {CAPACITY} TARGET</span>
           </div>
-          <div className={`spaces-card ${remaining <= 3 ? "spaces-low" : ""}`}>
-            <strong>{Math.max(0, remaining)}</strong>
-            <span>SPACES LEFT</span>
+          <div
+            className={`spaces-card ${
+              paxInside >= CAPACITY - 3 ? "spaces-low" : ""
+            }`}
+          >
+            <strong>{paxInside <= CAPACITY ? toTarget : toHardMax}</strong>
+            <span>{paxInside <= CAPACITY ? "TO TARGET" : "TO HARD MAX"}</span>
           </div>
         </div>
 
-        {overCapacityBy ? (
+        {aboveHardMaxBy ? (
           <div className="over-capacity-alert" role="alert">
-            OVER LIMIT BY {overCapacityBy} / NO MORE ENTRY
+            ABOVE HARD MAX / {paxInside} INSIDE / {aboveHardMaxBy} OVER {FLEX_CAPACITY} / STOP ENTRY
+          </div>
+        ) : paxInside === FLEX_CAPACITY ? (
+          <div className="over-capacity-alert" role="alert">
+            HARD MAX / {FLEX_CAPACITY} INSIDE / STOP ENTRY
+          </div>
+        ) : overTargetBy ? (
+          <div className="over-capacity-alert" role="alert">
+            FLEX MODE / {paxInside} INSIDE / {overTargetBy} OVER TARGET / {toHardMax} TO HARD MAX
+          </div>
+        ) : paxInside === CAPACITY ? (
+          <div className="target-capacity-alert" role="status">
+            AT {CAPACITY} TARGET / FLEX ENTRY REQUIRES CONFIRMATION
           </div>
         ) : null}
         {unsaved ? (
@@ -758,20 +867,22 @@ export default function PlayPotApp() {
           <div className="admission-composer">
             <div className="section-heading">
               <h2 id="admission-title">New family</h2>
-              <span className="policy-reminder">15 PAX MAX</span>
+              <span className="policy-reminder">
+                {CAPACITY} TARGET / {FLEX_CAPACITY} HARD MAX
+              </span>
             </div>
 
             <div className="front-counts">
               <Stepper
                 label="Adults"
                 value={customAdults}
-                max={CAPACITY - customChildren}
+                max={FLEX_CAPACITY - customChildren}
                 onChange={setCustomAdults}
               />
               <Stepper
                 label="Children"
                 value={customChildren}
-                max={CAPACITY - customAdults}
+                max={FLEX_CAPACITY - customAdults}
                 onChange={setCustomChildren}
               />
             </div>
@@ -793,24 +904,28 @@ export default function PlayPotApp() {
 
             <div
               className={`admission-result ${
-                fits ? "result-fit" : canOverflow ? "result-overflow" : "result-block"
+                fits ? "result-fit" : canFlex ? "result-overflow" : "result-block"
               }`}
             >
               {fits ? (
                 <>
                   <strong>{selectedPax} PAX FITS</strong>
-                  <span>{remaining - selectedPax} spaces remain after entry</span>
+                  <span>{CAPACITY - projectedPax} to target after entry</span>
                 </>
-              ) : canOverflow ? (
+              ) : canFlex ? (
                 <>
-                  <strong>OVERFLOW OPTION / {OVERFLOW_CAPACITY} OF {CAPACITY}</strong>
-                  <span>Area will be 1 over the limit / no more entry after this</span>
+                  <strong>FLEX ENTRY / {projectedPax} OF {FLEX_CAPACITY}</strong>
+                  <span>
+                    {projectedPax - CAPACITY} over target / {FLEX_CAPACITY - projectedPax} to hard max
+                  </span>
                 </>
               ) : (
                 <>
                   <strong>ENTRY BLOCKED</strong>
                   <span>
-                    Needs {selectedPax} / only {Math.max(0, remaining)} spaces left
+                    {paxInside > FLEX_CAPACITY
+                      ? `Area is ${aboveHardMaxBy} over the hard max / correct or check OUT first`
+                      : `Needs ${selectedPax} / only ${toHardMax} places to the hard max`}
                   </span>
                 </>
               )}
@@ -818,21 +933,22 @@ export default function PlayPotApp() {
 
             <button
               type="button"
-              className={`commit-family-button ${canOverflow ? "commit-overflow" : ""}`}
-              disabled={busy || (!fits && !canOverflow)}
-              onClick={() => {
-                if (canOverflow) {
+              className={`commit-family-button ${canFlex ? "commit-overflow" : ""}`}
+              disabled={busy || (!fits && !canFlex)}
+              onClick={(event) => {
+                if (canFlex) {
+                  confirmationReturnFocusRef.current = event.currentTarget;
                   confirmationHandledRef.current = false;
-                  setConfirmOverflow(true);
+                  setConfirmFlex(true);
                 } else handleAdd();
               }}
             >
               {fits
                 ? `ENTER FAMILY / ${selectedPax} PAX`
-                : canOverflow
-                  ? `OVERFLOW / RECORD ${OVERFLOW_CAPACITY} OF ${CAPACITY}`
-                  : remaining <= 0
-                    ? "FULL / STOP ENTRY"
+                : canFlex
+                  ? `FLEX ENTRY / RECORD ${projectedPax} OF ${FLEX_CAPACITY}`
+                  : toHardMax <= 0
+                    ? "HARD MAX / STOP ENTRY"
                     : `CANNOT ENTER / ${selectedPax} PAX`}
             </button>
           </div>
@@ -852,7 +968,8 @@ export default function PlayPotApp() {
                   family={family}
                   now={now}
                   disabled={busy}
-                  onOut={() => {
+                  onOut={(trigger) => {
+                    confirmationReturnFocusRef.current = trigger;
                     confirmationHandledRef.current = false;
                     setOutCandidate(family);
                   }}
@@ -875,6 +992,51 @@ export default function PlayPotApp() {
             )}
           </div>
         </section>
+
+        {recentlyOut.length ? (
+          <section className="recent-out-section" aria-label="Recently OUT families">
+            <details>
+              <summary>
+                <span>
+                  <strong>Recently OUT</strong>
+                  <em>{recentlyOut.length}</em>
+                </span>
+                <small>Kept on this phone for 15 min</small>
+              </summary>
+              <div className="recent-out-list">
+                {recentlyOut.map((family) => (
+                  <article className="recent-out-card" key={family.id}>
+                    <div className="recent-out-main">
+                      <div>
+                        <strong>{familyLabel(family)}</strong>
+                        <span>
+                          {family.adults}A {family.children}C / {familyPax(family)} PAX
+                        </span>
+                      </div>
+                      <p>{family.visual || "No visual recorded"}</p>
+                    </div>
+                    <div className="recent-out-times">
+                      <span>IN {formatClock(family.enteredAt)}</span>
+                      <span>OUT {formatClock(family.departedAt)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="restore-button"
+                      disabled={busy}
+                      onClick={(event) => {
+                        confirmationReturnFocusRef.current = event.currentTarget;
+                        confirmationHandledRef.current = false;
+                        setRestoreCandidate(family);
+                      }}
+                    >
+                      RESTORE
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </details>
+          </section>
+        ) : null}
       </div>
 
       {outCandidate ? (
@@ -896,7 +1058,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={() => setOutCandidate(null)}
+                onClick={cancelOpenConfirmation}
               >
                 NO
               </button>
@@ -908,6 +1070,7 @@ export default function PlayPotApp() {
                   confirmationHandledRef.current = true;
                   const family = outCandidate;
                   setOutCandidate(null);
+                  confirmationReturnFocusRef.current = null;
                   handleOut(family);
                 }}
               >
@@ -918,28 +1081,25 @@ export default function PlayPotApp() {
         </div>
       ) : null}
 
-      {confirmOverflow ? (
+      {confirmFlex ? (
         <div className="confirm-overlay">
           <section
             className="confirm-dialog confirm-dialog-overflow"
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="confirm-overflow-title"
-            aria-describedby="confirm-overflow-copy"
+            aria-labelledby="confirm-flex-title"
+            aria-describedby="confirm-flex-copy"
           >
-            <h2 id="confirm-overflow-title">
-              OVERFLOW TO {OVERFLOW_CAPACITY} / {CAPACITY}?
-            </h2>
-            <p id="confirm-overflow-copy">
-              This records {selectedPax} pax entering. The area will be 1 over the
-              limit and all further entry will stop.
+            <h2 id="confirm-flex-title">ALLOW FLEX ENTRY?</h2>
+            <p id="confirm-flex-copy">
+              This changes {paxInside} to {projectedPax} inside, {projectedPax - CAPACITY} above the {CAPACITY} target. {FLEX_CAPACITY - projectedPax} places remain before the hard maximum of {FLEX_CAPACITY}.
             </p>
             <div className="confirm-actions">
               <button
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={() => setConfirmOverflow(false)}
+                onClick={cancelOpenConfirmation}
               >
                 NO
               </button>
@@ -949,11 +1109,62 @@ export default function PlayPotApp() {
                 onClick={() => {
                   if (confirmationHandledRef.current) return;
                   confirmationHandledRef.current = true;
-                  setConfirmOverflow(false);
+                  setConfirmFlex(false);
+                  confirmationReturnFocusRef.current = null;
                   handleAdd(true);
                 }}
               >
-                YES, ALLOW
+                YES, ENTER
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {restoreCandidate ? (
+        <div className="confirm-overlay">
+          <section
+            className={`confirm-dialog ${
+              restoreProjectedPax > CAPACITY ? "confirm-dialog-overflow" : ""
+            }`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-restore-title"
+            aria-describedby="confirm-restore-copy"
+          >
+            <h2 id="confirm-restore-title">
+              RESTORE {familyLabel(restoreCandidate)}?
+            </h2>
+            <p id="confirm-restore-copy">
+              Return {familyPax(restoreCandidate)} pax to Inside now with the original IN time of {formatClock(restoreCandidate.enteredAt)}. The live count becomes {restoreProjectedPax}.
+              {restoreProjectedPax > FLEX_CAPACITY
+                ? ` This reveals a count above the ${FLEX_CAPACITY} hard max. Stop new entry and correct the live situation.`
+                : restoreProjectedPax > CAPACITY
+                  ? ` This is ${restoreProjectedPax - CAPACITY} above the ${CAPACITY} target.`
+                  : ""}
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={cancelOpenConfirmation}
+              >
+                NO
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (confirmationHandledRef.current) return;
+                  confirmationHandledRef.current = true;
+                  const family = restoreCandidate;
+                  setRestoreCandidate(null);
+                  confirmationReturnFocusRef.current = null;
+                  handleRestoreRecent(family);
+                }}
+              >
+                YES, RESTORE
               </button>
             </div>
           </section>
