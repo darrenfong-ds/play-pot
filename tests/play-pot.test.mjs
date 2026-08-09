@@ -72,16 +72,22 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /window\.localStorage/);
   assert.match(client, /LOCAL_STORAGE_KEY/);
   assert.match(client, /THIS PHONE \/ LIVE/);
-  assert.match(client, /ENTRY BLOCKED/);
+  assert.match(client, /CANNOT ENTER \/ MAX/);
   assert.match(client, /className="out-button"/);
   assert.match(
     client,
     /<summary aria-label=\{`Edit \$\{familyLabel\(family\)\}`\}>Edit<\/summary>/,
   );
   assert.match(client, /timeLimitMinutes} MIN REACHED/);
-  assert.match(client, /FLEX ENTRY/);
+  assert.doesNotMatch(client, /FLEX MODE|FLEX ENTRY|OVER TARGET|TO HARD MAX/);
+  assert.doesNotMatch(client, /FLEX \$\{totalInside\}/);
+  assert.doesNotMatch(
+    client,
+    /over-capacity-alert|target-capacity-alert|result-overflow|result-block/,
+  );
+  assert.match(client, /!fits \? "commit-overflow" : ""/);
   assert.match(client, /TARGET/);
-  assert.match(client, /HARD MAX/);
+  assert.match(client, /MAX PAX/);
   assert.match(client, /Recently OUT/);
   assert.match(client, /RESTORE/);
   assert.match(client, /YES, DELETE/);
@@ -109,6 +115,7 @@ test("keeps all operational data on one device", async () => {
     /confirm-delete-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE\s*</,
   );
   assert.match(client, /YES, ENTER/);
+  assert.match(client, /ENTER ABOVE \{CAPACITY\}\?/);
   assert.doesNotMatch(client, />\s*INSTALL APP\s*</);
   assert.doesNotMatch(client, />\s*LOCK\s*</);
   assert.doesNotMatch(client, />\s*NEW SHIFT\s*</);

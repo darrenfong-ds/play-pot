@@ -374,8 +374,8 @@ export function addLocalFamily(
     throw new LocalStateError(
       "capacity_exceeded",
       projectedPax <= FLEX_CAPACITY
-        ? `That entry would make the area ${projectedPax} / ${CAPACITY}. Confirm flex entry first.`
-        : `That entry would exceed the hard maximum of ${FLEX_CAPACITY} pax.`,
+        ? `That entry would bring the total to ${projectedPax}. Confirm entry above ${CAPACITY} first.`
+        : `That entry would exceed the maximum of ${FLEX_CAPACITY} pax.`,
     );
   }
   if (

@@ -12,7 +12,6 @@ import {
   familyDueAt,
   familyPax,
   FLEX_CAPACITY,
-  flexSpacesLeft,
   insideFamilies,
   LEGACY_LOCAL_STORAGE_BACKUP_KEY,
   LEGACY_LOCAL_STORAGE_KEY,
@@ -794,15 +793,10 @@ export default function PlayPotApp() {
         (family) => family.familyNumber === current.nextFamilyNumber,
       );
       const saved = commitState(next);
-      const totalInside = currentPax(next);
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${
-              totalInside > CAPACITY
-                ? `FLEX ${totalInside} of ${FLEX_CAPACITY}`
-                : `${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
-            }`
+          ? `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
           : "Entry was not recorded because this phone could not save it. Try again.",
       });
       recorded = saved;
@@ -1069,14 +1063,11 @@ export default function PlayPotApp() {
   const paxInside = currentPax(state);
   const remaining = spacesLeft(state);
   const toTarget = Math.max(0, remaining);
-  const toHardMax = flexSpacesLeft(state);
   const selectedPax = customAdults + customChildren;
   const projectedPax = paxInside + selectedPax;
   const fits = projectedPax <= CAPACITY;
   const canFlex =
     projectedPax > CAPACITY && projectedPax <= FLEX_CAPACITY;
-  const overTargetBy = Math.max(0, paxInside - CAPACITY);
-  const aboveHardMaxBy = Math.max(0, paxInside - FLEX_CAPACITY);
   const restoreProjectedPax = restoreCandidate
     ? paxInside + familyPax(restoreCandidate)
     : paxInside;
@@ -1108,13 +1099,9 @@ export default function PlayPotApp() {
             <strong>{paxInside}</strong>
             <span>/ {CAPACITY} TARGET</span>
           </div>
-          <div
-            className={`spaces-card ${
-              paxInside >= CAPACITY - 3 ? "spaces-low" : ""
-            }`}
-          >
-            <strong>{paxInside <= CAPACITY ? toTarget : toHardMax}</strong>
-            <span>{paxInside <= CAPACITY ? "TO TARGET" : "TO HARD MAX"}</span>
+          <div className="spaces-card">
+            <strong>{paxInside <= CAPACITY ? toTarget : FLEX_CAPACITY}</strong>
+            <span>{paxInside <= CAPACITY ? "TO TARGET" : "MAX PAX"}</span>
           </div>
         </div>
 
@@ -1135,23 +1122,6 @@ export default function PlayPotApp() {
           </div>
         ) : null}
 
-        {aboveHardMaxBy ? (
-          <div className="over-capacity-alert" role="alert">
-            ABOVE HARD MAX / {paxInside} INSIDE / {aboveHardMaxBy} OVER {FLEX_CAPACITY} / STOP ENTRY
-          </div>
-        ) : paxInside === FLEX_CAPACITY ? (
-          <div className="over-capacity-alert" role="alert">
-            HARD MAX / {FLEX_CAPACITY} INSIDE / STOP ENTRY
-          </div>
-        ) : overTargetBy ? (
-          <div className="over-capacity-alert" role="alert">
-            FLEX MODE / {paxInside} INSIDE / {overTargetBy} OVER TARGET / {toHardMax} TO HARD MAX
-          </div>
-        ) : paxInside === CAPACITY ? (
-          <div className="target-capacity-alert" role="status">
-            AT {CAPACITY} TARGET / FLEX ENTRY REQUIRES CONFIRMATION
-          </div>
-        ) : null}
         {unsaved ? (
           <div className="storage-alert" role="alert">
             PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
@@ -1164,9 +1134,6 @@ export default function PlayPotApp() {
           <div className="admission-composer">
             <div className="section-heading">
               <h2 id="admission-title">New family</h2>
-              <span className="policy-reminder">
-                {CAPACITY} TARGET / {FLEX_CAPACITY} HARD MAX
-              </span>
             </div>
 
             <div className="front-counts">
@@ -1199,39 +1166,17 @@ export default function PlayPotApp() {
               />
             </div>
 
-            <div
-              className={`admission-result ${
-                fits ? "result-fit" : canFlex ? "result-overflow" : "result-block"
-              }`}
-            >
-              {fits ? (
-                <>
-                  <strong>{selectedPax} PAX FITS</strong>
-                  <span>{CAPACITY - projectedPax} to target after entry</span>
-                </>
-              ) : canFlex ? (
-                <>
-                  <strong>FLEX ENTRY / {projectedPax} OF {FLEX_CAPACITY}</strong>
-                  <span>
-                    {projectedPax - CAPACITY} over target / {FLEX_CAPACITY - projectedPax} to hard max
-                  </span>
-                </>
-              ) : (
-                <>
-                  <strong>ENTRY BLOCKED</strong>
-                  <span>
-                    {paxInside > FLEX_CAPACITY
-                      ? `Area is ${aboveHardMaxBy} over the hard max / correct or check OUT first`
-                      : `Needs ${selectedPax} / only ${toHardMax} places to the hard max`}
-                  </span>
-                </>
-              )}
-            </div>
+            {fits ? (
+              <div className="admission-result result-fit">
+                <strong>{selectedPax} PAX FITS</strong>
+                <span>{CAPACITY - projectedPax} to target after entry</span>
+              </div>
+            ) : null}
 
             <button
               type="button"
               className={`commit-family-button ${
-                canFlex ? "commit-overflow" : ""
+                !fits ? "commit-overflow" : ""
               } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
               disabled={busy || entryLocked || (!fits && !canFlex)}
               aria-busy={entryLocked}
@@ -1250,10 +1195,10 @@ export default function PlayPotApp() {
                 : fits
                 ? `ENTER FAMILY / ${selectedPax} PAX`
                 : canFlex
-                  ? `FLEX ENTRY / RECORD ${projectedPax} OF ${FLEX_CAPACITY}`
-                  : toHardMax <= 0
-                    ? "HARD MAX / STOP ENTRY"
-                    : `CANNOT ENTER / ${selectedPax} PAX`}
+                  ? `ENTER FAMILY / ${selectedPax} PAX`
+                  : paxInside >= FLEX_CAPACITY
+                    ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
+                    : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
             </button>
           </div>
         </section>
@@ -1425,9 +1370,9 @@ export default function PlayPotApp() {
             aria-labelledby="confirm-flex-title"
             aria-describedby="confirm-flex-copy"
           >
-            <h2 id="confirm-flex-title">ALLOW FLEX ENTRY?</h2>
+            <h2 id="confirm-flex-title">ENTER ABOVE {CAPACITY}?</h2>
             <p id="confirm-flex-copy">
-              This changes {paxInside} to {projectedPax} inside, {projectedPax - CAPACITY} above the {CAPACITY} target. {FLEX_CAPACITY - projectedPax} places remain before the hard maximum of {FLEX_CAPACITY}.
+              This will bring the total to {projectedPax}. Maximum {FLEX_CAPACITY}.
             </p>
             <div className="confirm-actions">
               <button
@@ -1474,9 +1419,9 @@ export default function PlayPotApp() {
             <p id="confirm-restore-copy">
               Return {familyPax(restoreCandidate)} pax to Inside now with the original IN time of {formatClock(restoreCandidate.enteredAt)}. The live count becomes {restoreProjectedPax}.
               {restoreProjectedPax > FLEX_CAPACITY
-                ? ` This reveals a count above the ${FLEX_CAPACITY} hard max. Stop new entry and correct the live situation.`
+                ? ` This reveals a total above ${FLEX_CAPACITY}. Stop new entry and correct the live count.`
                 : restoreProjectedPax > CAPACITY
-                  ? ` This is ${restoreProjectedPax - CAPACITY} above the ${CAPACITY} target.`
+                  ? ` This puts the total above ${CAPACITY}.`
                   : ""}
             </p>
             <div className="confirm-actions">
@@ -1571,7 +1516,7 @@ export default function PlayPotApp() {
               live total changes from {paxInside} to {editProjectedPax}.
               {editProjectedPax > FLEX_CAPACITY
                 ? ` This records the true count, but new entry stays blocked above ${FLEX_CAPACITY}.`
-                : ` This is ${editProjectedPax - CAPACITY} above the ${CAPACITY} target.`}
+                : ` This puts the total above ${CAPACITY}.`}
             </p>
             <div className="confirm-actions">
               <button

@@ -294,12 +294,6 @@ html[data-theme="dark"] .theme-toggle-orb {
   letter-spacing: 0.07em;
 }
 
-.spaces-low {
-  background: #7a3b25;
-}
-
-.over-capacity-alert,
-.target-capacity-alert,
 .storage-alert {
   width: 100%;
   padding: 0.68rem 1rem;
@@ -308,14 +302,6 @@ html[data-theme="dark"] .theme-toggle-orb {
   font-size: 0.78rem;
   font-weight: 950;
   letter-spacing: 0.07em;
-}
-
-.over-capacity-alert {
-  background: var(--coral-fill);
-}
-
-.target-capacity-alert {
-  background: #8b5b05;
 }
 
 .storage-alert {
@@ -355,7 +341,6 @@ html[data-theme="dark"] .theme-toggle-orb {
   letter-spacing: -0.025em;
 }
 
-.policy-reminder,
 .section-count {
   color: var(--muted);
   font-size: 0.66rem;
@@ -460,17 +445,6 @@ html[data-theme="dark"] .theme-toggle-orb {
 .result-fit {
   border: 1px solid var(--teal);
   background: var(--green-soft);
-}
-
-.result-overflow,
-.result-block {
-  border: 1px solid var(--coral);
-  background: var(--red-soft);
-}
-
-.result-overflow strong,
-.result-overflow span {
-  color: var(--coral-dark);
 }
 
 .commit-family-button {
