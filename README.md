@@ -25,12 +25,6 @@ After 15 minutes, the completed family record is removed from this phone's curre
 
 Clearing browser or installed-app site data erases that phone's Play Pot record. Use one phone for one operating record because devices do not share capacity.
 
-## Offline reopening
-
-After one successful online opening, the installed app can reopen without internet for up to 12 hours, but never beyond the next midnight in Singapore. A complete app shell must have been saved first. While offline, the app shows `OFFLINE / SAVING ON THIS PHONE`; entries still stay only on that phone and are not uploaded or synchronized later.
-
-An online response that asks for the PIN always takes priority and clears offline access. Clearing site data also removes offline access. Private browsing and browser or operating-system storage cleanup are not reliable for persistent offline use.
-
 All operational actions remain manual. The app never admits, edits, restores, deletes, or checks out a family by itself. The only automatic record action is the existing privacy cleanup that removes a completed `Recently OUT` recovery record after 15 minutes while open, or on the next opening.
 
 ## Local development

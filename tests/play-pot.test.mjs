@@ -42,7 +42,6 @@ test("keeps all operational data on one device", async () => {
   const [
     client,
     localCore,
-    offlineAccess,
     css,
     layout,
     readme,
@@ -57,7 +56,6 @@ test("keeps all operational data on one device", async () => {
   ] = await Promise.all([
     readFile(new URL("../app/play-pot-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/play-pot-local.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/offline-access.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
@@ -91,9 +89,6 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /ENTRY_LOCK_MILLISECONDS = 700/);
   assert.match(client, /RECORDED ✓/);
   assert.match(client, /NEXT DUE/);
-  assert.match(client, /OFFLINE \/ SAVING ON THIS PHONE/);
-  assert.match(client, /PLAY_POT_OFFLINE_STATUS/);
-  assert.match(client, /updateViaCache: "none"/);
   assert.match(client, /play-pot\.theme\.v1/);
   assert.match(client, /<ThemeToggle/);
   assert.match(client, /-5 MIN/);
@@ -127,8 +122,6 @@ test("keeps all operational data on one device", async () => {
   assert.match(client, /LEGACY_LOCAL_STORAGE_KEY/);
   assert.match(client, /purgeExpiredCompletedFamilies\(previous, savedAt\)/);
   assert.match(client, /removeItem\(LEGACY_LOCAL_STORAGE_BACKUP_KEY\)/);
-  assert.match(offlineAccess, /OFFLINE_ACCESS_MILLISECONDS = 12 \* 60 \* 60_000/);
-  assert.match(offlineAccess, /nextSingaporeMidnight/);
 
   const removedConcepts =
     /waitlist|queue|fifo|ask first|can enter now|waiting (?:list|family|queue)|api\/state/i;
@@ -162,87 +155,7 @@ test("keeps all operational data on one device", async () => {
     ["192x192", "512x512"],
   );
   assert.match(serviceWorker, /addEventListener\("fetch"/);
-  assert.match(serviceWorker, /caches\.open/);
-  assert.match(serviceWorker, /pathname\.startsWith\("\/api\/"\)/);
-  assert.doesNotMatch(serviceWorker, /skipWaiting/);
-});
-
-test("allows offline reopening for at most 12 hours and never past Singapore midnight", async () => {
-  const offline = await import(
-    new URL("../app/offline-access.ts", import.meta.url)
-  );
-
-  const morning = Date.parse("2026-08-09T01:00:00.000Z"); // 9:00am Singapore
-  const morningAccess = offline.createOfflineAccess(morning);
-  assert.deepEqual(Object.keys(morningAccess).sort(), [
-    "expiresAt",
-    "schemaVersion",
-    "singaporeDate",
-    "verifiedAt",
-  ]);
-  assert.equal(morningAccess.singaporeDate, "2026-08-09");
-  assert.equal(
-    morningAccess.expiresAt,
-    "2026-08-09T13:00:00.000Z",
-  );
-  assert.ok(
-    offline.readOfflineAccess(
-      JSON.stringify(morningAccess),
-      Date.parse(morningAccess.expiresAt) - 1,
-    ),
-  );
-  assert.equal(
-    offline.readOfflineAccess(
-      JSON.stringify(morningAccess),
-      Date.parse(morningAccess.expiresAt),
-    ),
-    null,
-  );
-
-  const evening = Date.parse("2026-08-09T12:00:00.000Z"); // 8:00pm Singapore
-  const eveningAccess = offline.createOfflineAccess(evening);
-  assert.equal(
-    eveningAccess.expiresAt,
-    "2026-08-09T16:00:00.000Z",
-  );
-  const justBeforeMidnight = Date.parse("2026-08-09T15:59:59.000Z");
-  const delayedShellAccess = offline.createOfflineAccess(justBeforeMidnight);
-  assert.equal(
-    offline.readOfflineAccess(
-      JSON.stringify(delayedShellAccess),
-      Date.parse("2026-08-09T16:00:00.000Z"),
-    ),
-    null,
-  );
-
-  assert.equal(
-    offline.readOfflineAccess(
-      JSON.stringify({ ...morningAccess, schemaVersion: 2 }),
-      morning + 1,
-    ),
-    null,
-  );
-  assert.equal(
-    offline.readOfflineAccess(
-      JSON.stringify({
-        ...morningAccess,
-        expiresAt: "2026-08-10T01:00:00.000Z",
-      }),
-      morning + 1,
-    ),
-    null,
-  );
-  assert.equal(
-    offline.readOfflineAccess(
-      JSON.stringify({
-        ...morningAccess,
-        verifiedAt: "2026-08-09T02:00:00.000Z",
-      }),
-      morning,
-    ),
-    null,
-  );
-  assert.equal(offline.readOfflineAccess("not-json", morning), null);
+  assert.doesNotMatch(serviceWorker, /caches\./);
 });
 
 test("enforces capacity without creating an outside record", async () => {

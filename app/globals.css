@@ -298,25 +298,6 @@ html[data-theme="dark"] .theme-toggle-orb {
   background: #7a3b25;
 }
 
-.offline-status {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.52rem 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  background: #34505a;
-  color: #f5fbfa;
-  text-align: center;
-  font-size: 0.68rem;
-  font-weight: 950;
-  letter-spacing: 0.075em;
-}
-
-html[data-theme="dark"] .offline-status {
-  background: #263f45;
-}
-
 .over-capacity-alert,
 .target-capacity-alert,
 .storage-alert {

@@ -33,11 +33,6 @@ import {
   type Family,
   type PlayPotState,
 } from "./play-pot-local";
-import {
-  createOfflineAccess,
-  OFFLINE_ACCESS_KEY,
-  readOfflineAccess,
-} from "./offline-access";
 
 type UndoAction = {
   id: string;
@@ -74,7 +69,6 @@ const sgTime = new Intl.DateTimeFormat("en-SG", {
 });
 
 const ENTRY_LOCK_MILLISECONDS = 700;
-const GUEST_CHECK_TIMEOUT_MILLISECONDS = 7_000;
 const THEME_STORAGE_KEY = "play-pot.theme.v1";
 
 function formatClock(value: string | null) {
@@ -410,7 +404,6 @@ export default function PlayPotApp() {
   const [loadError, setLoadError] = useState("");
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [theme, setTheme] = useState<Theme>("light");
   const [themeReady, setThemeReady] = useState(false);
@@ -428,9 +421,6 @@ export default function PlayPotApp() {
   const [entryRecorded, setEntryRecorded] = useState(false);
   const entryLockRef = useRef(false);
   const entryUnlockTimerRef = useRef<number | null>(null);
-  const offlineAccessPreparingRef = useRef<number | null>(null);
-  const offlineAccessGenerationRef = useRef(0);
-  const guestCheckGenerationRef = useRef(0);
   const cancelConfirmationRef = useRef<HTMLButtonElement | null>(null);
   const confirmationDialogRef = useRef<HTMLElement | null>(null);
   const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -482,107 +472,6 @@ export default function PlayPotApp() {
 
   function handleThemeToggle() {
     setTheme((current) => (current === "light" ? "dark" : "light"));
-  }
-
-  function clearOfflineAccess() {
-    offlineAccessGenerationRef.current += 1;
-    try {
-      window.localStorage.removeItem(OFFLINE_ACCESS_KEY);
-    } catch {
-      // Access is already unavailable if this browser cannot update local storage.
-    }
-  }
-
-  function hasValidOfflineAccess() {
-    try {
-      return Boolean(
-        readOfflineAccess(
-          window.localStorage.getItem(OFFLINE_ACCESS_KEY),
-          Date.now(),
-        ),
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  function queryOfflineWorker(worker: ServiceWorker) {
-    return new Promise<boolean>((resolve) => {
-      const channel = new MessageChannel();
-      let settled = false;
-      const finish = (ready: boolean) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timeout);
-        channel.port1.close();
-        resolve(ready);
-      };
-      const timeout = window.setTimeout(() => finish(false), 600);
-      channel.port1.onmessage = (event: MessageEvent) => {
-        finish(
-          event.data?.type === "PLAY_POT_OFFLINE_STATUS" &&
-            event.data?.ready === true,
-        );
-      };
-      try {
-        worker.postMessage(
-          { type: "PLAY_POT_OFFLINE_STATUS" },
-          [channel.port2],
-        );
-      } catch {
-        finish(false);
-      }
-    });
-  }
-
-  async function offlineShellIsReady() {
-    const deadline = Date.now() + 8_000;
-    do {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration) {
-        const candidates = [registration.waiting, registration.active].filter(
-          (worker, index, workers): worker is ServiceWorker =>
-            Boolean(worker) && workers.indexOf(worker) === index,
-        );
-        const readiness = await Promise.all(
-          candidates.map((worker) => queryOfflineWorker(worker)),
-        );
-        if (readiness.some(Boolean)) return true;
-      }
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
-    } while (Date.now() < deadline);
-    return false;
-  }
-
-  function rememberOfflineAccessWhenReady(verifiedAt: number) {
-    const generation = offlineAccessGenerationRef.current;
-    if (
-      !("serviceWorker" in navigator) ||
-      offlineAccessPreparingRef.current === generation
-    ) {
-      return;
-    }
-    offlineAccessPreparingRef.current = generation;
-    void (async () => {
-      try {
-        await navigator.serviceWorker.ready;
-        if (!(await offlineShellIsReady())) return;
-        if (generation !== offlineAccessGenerationRef.current) return;
-        const access = createOfflineAccess(verifiedAt);
-        const serializedAccess = JSON.stringify(access);
-        if (!readOfflineAccess(serializedAccess, Date.now())) return;
-        window.localStorage.setItem(
-          OFFLINE_ACCESS_KEY,
-          serializedAccess,
-        );
-      } catch {
-        // Offline access is optional and visitor records remain untouched.
-      } finally {
-        if (offlineAccessPreparingRef.current === generation) {
-          offlineAccessPreparingRef.current = null;
-        }
-      }
-    })();
   }
 
   function openThisPhoneState() {
@@ -644,62 +533,27 @@ export default function PlayPotApp() {
   }
 
   async function loadState() {
-    const requestGeneration = guestCheckGenerationRef.current + 1;
-    guestCheckGenerationRef.current = requestGeneration;
-    const controller = new AbortController();
-    const requestTimeout = window.setTimeout(
-      () => controller.abort(),
-      GUEST_CHECK_TIMEOUT_MILLISECONDS,
-    );
     setLoadError("");
     try {
-      const response = await fetch("/api/guest", {
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      if (requestGeneration !== guestCheckGenerationRef.current) return;
-      if (response.status === 401 || response.status === 403) {
-        clearOfflineAccess();
-        stateRef.current = null;
-        setState(null);
-        setIsOffline(false);
-        setAuthState("locked");
-        return;
-      }
+      const response = await fetch("/api/guest", { cache: "no-store" });
       const body = (await response.json()) as {
         authenticated?: boolean;
         error?: string;
       };
-      if (requestGeneration !== guestCheckGenerationRef.current) return;
       if (!response.ok) {
-        throw new Error(body.error ?? "Play Pot is temporarily unavailable.");
+        throw new Error(body.error ?? "Could not open Play Pot.");
       }
       if (!body.authenticated) {
-        clearOfflineAccess();
         stateRef.current = null;
         setState(null);
-        setIsOffline(false);
         setAuthState("locked");
         return;
       }
-      const verifiedAt = Date.now();
-      setIsOffline(false);
       openThisPhoneState();
-      rememberOfflineAccessWhenReady(verifiedAt);
-    } catch {
-      if (requestGeneration !== guestCheckGenerationRef.current) return;
-      if (stateRef.current || hasValidOfflineAccess()) {
-        setIsOffline(true);
-        setLoadError("");
-        if (!stateRef.current) openThisPhoneState();
-        return;
-      }
-      setIsOffline(true);
+    } catch (error) {
       setLoadError(
-        "Connect once and open Play Pot online before using it offline.",
+        error instanceof Error ? error.message : "Could not open Play Pot.",
       );
-    } finally {
-      window.clearTimeout(requestTimeout);
     }
   }
 
@@ -761,27 +615,13 @@ export default function PlayPotApp() {
       const next = readLocalState(event.newValue);
       if (next) showState(next);
     };
-    const markOffline = () => setIsOffline(true);
-    const revalidateOnline = () => {
-      void loadState();
-      if ("serviceWorker" in navigator) {
-        void navigator.serviceWorker
-          .getRegistration()
-          .then((registration) => registration?.update())
-          .catch(() => undefined);
-      }
-    };
     document.addEventListener("visibilitychange", refreshOnReturn);
     window.addEventListener("storage", refreshFromThisBrowser);
-    window.addEventListener("offline", markOffline);
-    window.addEventListener("online", revalidateOnline);
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(tick);
       document.removeEventListener("visibilitychange", refreshOnReturn);
       window.removeEventListener("storage", refreshFromThisBrowser);
-      window.removeEventListener("offline", markOffline);
-      window.removeEventListener("online", revalidateOnline);
     };
     // This effect owns the page lifecycle and deliberately runs once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -843,9 +683,7 @@ export default function PlayPotApp() {
     window.addEventListener("beforeinstallprompt", rememberInstallPrompt);
     window.addEventListener("appinstalled", markInstalled);
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker
-        .register("/sw.js", { updateViaCache: "none" })
-        .catch(() => undefined);
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
 
     return () => {
@@ -955,20 +793,13 @@ export default function PlayPotApp() {
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          clearOfflineAccess();
-        }
         setUnlockError(body.error ?? "Could not open Play Pot.");
         return;
       }
-      const verifiedAt = Date.now();
       setGuestPin("");
-      rememberOfflineAccessWhenReady(verifiedAt);
       await loadState();
     } catch {
-      setUnlockError(
-        "Connect to the internet once to unlock offline access on this phone.",
-      );
+      setUnlockError("Could not connect. Check this phone's internet connection.");
     } finally {
       setPending("");
     }
@@ -1374,11 +1205,6 @@ export default function PlayPotApp() {
         {unsaved ? (
           <div className="storage-alert" role="alert">
             PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
-          </div>
-        ) : null}
-        {isOffline ? (
-          <div className="offline-status" role="status">
-            OFFLINE / SAVING ON THIS PHONE
           </div>
         ) : null}
       </header>

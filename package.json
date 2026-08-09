@@ -7,9 +7,9 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build && node scripts/finalize-service-worker.mjs",
+    "build": "vinext build",
     "start": "vinext start",
-    "test": "pnpm run build && node --test tests/*.test.mjs",
+    "test": "vinext build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
