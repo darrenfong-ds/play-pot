@@ -38,7 +38,7 @@ test("server-renders the finished Play Pot shell", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
-test("keeps all operational data on one device", async () => {
+test("keeps phone control local and exposes only a read-only live mirror", async () => {
   const [
     client,
     localCore,
@@ -53,6 +53,12 @@ test("keeps all operational data on one device", async () => {
     manifestText,
     serviceWorker,
     worker,
+    liveCore,
+    liveRoute,
+    adminLiveRoute,
+    adminAuth,
+    adminClient,
+    migration,
   ] = await Promise.all([
     readFile(new URL("../app/play-pot-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/play-pot-local.ts", import.meta.url), "utf8"),
@@ -67,11 +73,21 @@ test("keeps all operational data on one device", async () => {
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/live-view-core.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/live/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/live/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/admin-live-view.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0000_live_device_snapshots.sql", import.meta.url), "utf8"),
   ]);
 
   assert.match(client, /window\.localStorage/);
   assert.match(client, /LOCAL_STORAGE_KEY/);
-  assert.match(client, /THIS PHONE \/ LIVE/);
+  assert.match(client, /THIS PHONE \/ LIVE VIEW/);
+  assert.match(client, /createLiveSyncPayload/);
+  assert.match(client, /fetch\("\/api\/live"/);
+  assert.match(client, /visible to the tool owner/);
+  assert.match(client, /Do not enter names or contact details/);
   assert.match(client, /PIN\s*<strong>000000<\/strong>/);
   assert.match(client, /pending === "unlock" \? "ENTERING\.\.\." : "ENTER"/);
   assert.doesNotMatch(
@@ -207,16 +223,33 @@ test("keeps all operational data on one device", async () => {
   assert.doesNotMatch(`${guestRoute}\n${guestAuth}\n${guestSessionCore}`, /000000/);
 
   const hostingConfig = JSON.parse(hosting);
-  assert.equal(hostingConfig.d1, null);
+  assert.equal(hostingConfig.d1, "DB");
   assert.equal(hostingConfig.r2, null);
   assert.match(hostingConfig.project_id, /^appgprj_/);
-  assert.doesNotMatch(worker, /D1Database|\bDB:/);
+  assert.match(worker, /\bDB: unknown/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
+
+  assert.match(liveCore, /LIVE_HEARTBEAT_MILLISECONDS = 30_000/);
+  assert.match(liveCore, /LIVE_RETENTION_MILLISECONDS = 12 \* 60 \* 60_000/);
+  assert.match(liveRoute, /guardGuestRequest/);
+  assert.match(liveRoute, /export async function POST/);
+  assert.doesNotMatch(liveRoute, /export async function (?:GET|DELETE|PUT|PATCH)/);
+  assert.match(adminLiveRoute, /guardAdminRequest/);
+  assert.match(adminLiveRoute, /export async function GET/);
+  assert.doesNotMatch(adminLiveRoute, /export async function (?:POST|DELETE|PUT|PATCH)/);
+  assert.match(adminAuth, /__Host-play_pot_admin/);
+  assert.match(adminAuth, /HttpOnly/);
+  assert.match(adminAuth, /SameSite=Strict/);
+  assert.match(adminClient, /VIEW ONLY/);
+  assert.match(adminClient, /Family controls remain only on each staff phone/);
+  assert.doesNotMatch(adminClient, /YES, OUT|RESTORE|DELETE ALL|SAVE COUNT/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS live_device_snapshots/);
+  assert.match(migration, /idx_live_device_snapshots_expires_at/);
 
   const manifest = JSON.parse(manifestText);
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.start_url, "/");
-  assert.match(manifest.description, /On-device/i);
+  assert.match(manifest.description, /read-only live view/i);
   assert.deepEqual(
     manifest.icons.map((icon) => icon.sizes),
     ["192x192", "512x512"],
@@ -1138,6 +1171,7 @@ test("signs, expires, and rejects tampered guest sessions", async () => {
     createSessionToken,
     GUEST_SESSION_SECONDS,
     pinMatches,
+    secretMatches,
     sessionTokenIsValid,
   } = await import(new URL("../app/guest-session-core.ts", import.meta.url));
   const config = {
@@ -1149,6 +1183,22 @@ test("signs, expires, and rejects tampered guest sessions", async () => {
   assert.equal(await pinMatches("654321", config), true);
   assert.equal(await pinMatches("111111", config), false);
   assert.equal(await pinMatches("65432", config), false);
+  assert.equal(
+    await secretMatches(
+      "owner-password-1234",
+      "owner-password-1234",
+      "admin-comparison-secret",
+    ),
+    true,
+  );
+  assert.equal(
+    await secretMatches(
+      "wrong-password-1234",
+      "owner-password-1234",
+      "admin-comparison-secret",
+    ),
+    false,
+  );
 
   const token = await createSessionToken(config, issuedAt);
   assert.equal(await sessionTokenIsValid(token, config, issuedAt), true);

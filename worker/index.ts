@@ -8,6 +8,7 @@ interface AssetFetcher {
 
 interface Env {
   ASSETS: AssetFetcher;
+  DB: unknown;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

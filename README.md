@@ -2,7 +2,7 @@
 
 A one-hand, mobile-first capacity and family-timer tool for the Play Pot area at Children's Museum Singapore.
 
-The site is an installable web app. Staff use the shared six-digit guest PIN to open it, but each phone keeps a completely independent Play Pot record in that browser's local storage. Families, counts, timers, and recent OUT records are never synced between staff devices.
+The site is an installable web app. Staff use the shared six-digit guest PIN to open it, and each phone independently controls its own Play Pot record in that browser's local storage. The phone also sends an anonymous, read-only mirror of families currently inside to a separately protected owner dashboard. Other staff phones cannot view or change one another's records.
 
 ## Operating rules
 
@@ -10,14 +10,13 @@ The site is an installable web app. Staff use the shared six-digit guest PIN to 
 - The normal Play Pot count is 15 pax.
 - Entry above 15 pax uses one simple red button and a second confirmation. New entry above the maximum of 20 is always blocked.
 - Each family starts with a 15-minute limit. Under `Edit`, staff can adjust the limit one minute at a time. A count increase above 15 pax still needs confirmation.
-- Family numbers are allocated only on successful entry and continue on that phone.
-- The `ENTER FAMILY` button locks for 700 milliseconds after the first tap and shows `RECORDED` after a verified phone save. This prevents a rapid double tap without slowing the next family.
+- Family numbers are allocated only on successful entry. They continue while an active or recent recovery record exists, then restart at #1 when the tracker is completely empty.
+- The entry button locks for 700 milliseconds after the first tap and shows `RECORDED` after a verified phone save. This prevents a rapid double tap without slowing the next family.
 - Adult and child counts are entered directly before admission. The visual identifier is optional.
 - Visual identifiers should be short, neutral clothing or object descriptions. Do not record names, ethnicity, nationality, ticket numbers, photos, or dates of birth.
 - A compact `NEXT DUE` strip always points to the family whose timer reaches its limit first. It is an indicator only and never performs an automatic OUT.
-- Light and dark modes are chosen manually and remembered on that phone.
 
-## Phone-only memory
+## Device memory and read-only live view
 
 `OUT` first asks for confirmation with `No` on the left and `Yes, OUT` on the right. A confirmed OUT also offers a short undo. For accidental check-outs, a collapsed `Recently OUT` control directly above the active family cards keeps the family number, adult/child count, visual, IN time, OUT time, and timer setting for up to 15 minutes. Restoring a family preserves its original IN time. Staff can also manually delete one recent record after a second confirmation, with `No` on the left and `Yes, Delete` on the right.
 
@@ -25,11 +24,13 @@ After 15 minutes, the completed family record is removed from this phone's curre
 
 Clearing browser or installed-app site data erases that phone's Play Pot record. Use one phone for one operating record because devices do not share capacity.
 
+The private owner dashboard is view-only. It shows anonymous phone labels, current families, counts, timers, visuals, and an entry total for the active device session. It has no route or control for admitting, editing, restoring, deleting, or checking out a family on a staff phone. Completed family details are not kept in the shared dashboard, and an inactive phone's anonymous live record expires after 12 hours.
+
 All operational actions remain manual. The app never admits, edits, restores, deletes, or checks out a family by itself. The only automatic record action is the existing privacy cleanup that removes a completed `Recently OUT` recovery record after 15 minutes while open, or on the next opening.
 
 ## Local development
 
-The app uses vinext and browser-local storage for operational data. The server handles only the guest PIN session.
+The app uses vinext, browser-local storage for each phone's authoritative operational record, and D1 for the temporary read-only live mirror. The server separately protects staff and owner sessions.
 
 ```bash
 pnpm install

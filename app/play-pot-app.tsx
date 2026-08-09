@@ -33,6 +33,11 @@ import {
   type Family,
   type PlayPotState,
 } from "./play-pot-local";
+import {
+  createLiveSyncPayload,
+  LIVE_DEVICE_STORAGE_KEY,
+  LIVE_HEARTBEAT_MILLISECONDS,
+} from "./live-view-core";
 
 type UndoAction = {
   id: string;
@@ -354,6 +359,59 @@ export default function PlayPotApp() {
   const confirmationDialogRef = useRef<HTMLElement | null>(null);
   const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const confirmationHandledRef = useRef(false);
+  const liveDeviceIdRef = useRef("");
+  const liveSyncInFlightRef = useRef(false);
+  const liveSyncPendingRef = useRef<PlayPotState | null>(null);
+
+  function liveDeviceId() {
+    if (liveDeviceIdRef.current) return liveDeviceIdRef.current;
+    try {
+      const existing = window.localStorage.getItem(LIVE_DEVICE_STORAGE_KEY);
+      if (existing && /^[A-Za-z0-9_-]{8,80}$/.test(existing)) {
+        liveDeviceIdRef.current = existing;
+        return existing;
+      }
+    } catch {
+      // A temporary ID still allows the tracker itself to remain usable.
+    }
+    const created = crypto.randomUUID();
+    liveDeviceIdRef.current = created;
+    try {
+      window.localStorage.setItem(LIVE_DEVICE_STORAGE_KEY, created);
+    } catch {
+      // Live view is best-effort and never blocks local operations.
+    }
+    return created;
+  }
+
+  function scheduleLiveSync(next: PlayPotState) {
+    liveSyncPendingRef.current = next;
+    if (liveSyncInFlightRef.current) return;
+    liveSyncInFlightRef.current = true;
+
+    const flush = async () => {
+      while (liveSyncPendingRef.current) {
+        const pendingState = liveSyncPendingRef.current;
+        liveSyncPendingRef.current = null;
+        try {
+          await fetch("/api/live", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              createLiveSyncPayload(pendingState, liveDeviceId()),
+            ),
+            cache: "no-store",
+            keepalive: true,
+          });
+        } catch {
+          // A failed mirror must never interrupt the phone's local tracker.
+        }
+      }
+      liveSyncInFlightRef.current = false;
+    };
+    void flush();
+  }
+
   function showState(next: PlayPotState) {
     stateRef.current = next;
     setState(next);
@@ -562,6 +620,22 @@ export default function PlayPotApp() {
       void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
   }, []);
+
+  useEffect(() => {
+    if (authState !== "ready" || !state) return;
+    const initialSync = window.setTimeout(() => scheduleLiveSync(state), 0);
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const current = stateRef.current;
+      if (current) scheduleLiveSync(current);
+    }, LIVE_HEARTBEAT_MILLISECONDS);
+    return () => {
+      window.clearTimeout(initialSync);
+      window.clearInterval(heartbeat);
+    };
+    // Live sync is best-effort and intentionally follows each saved revision.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState, state]);
 
   useEffect(() => {
     if (!notice) return;
@@ -949,7 +1023,10 @@ export default function PlayPotApp() {
               {pending === "unlock" ? "ENTERING..." : "ENTER"}
             </button>
           </form>
-          <small>Private staff tool / family details stay on this phone.</small>
+          <small>
+            Each phone controls its own tracker. Live operational entries are
+            visible to the tool owner. Do not enter names or contact details.
+          </small>
         </section>
       </main>
     );
@@ -1018,7 +1095,7 @@ export default function PlayPotApp() {
         <div className="brand-row">
           <h1>PLAY POT</h1>
           <div className="brand-actions">
-            <span className="live-label">THIS PHONE / LIVE</span>
+            <span className="live-label">THIS PHONE / LIVE VIEW</span>
           </div>
         </div>
 

@@ -46,19 +46,42 @@ function safeEqual(left: string, right: string) {
 
 export async function pinMatches(value: unknown, config: GuestSessionConfig) {
   if (typeof value !== "string" || !/^\d{6}$/.test(value)) return false;
-  const comparisonSecret = `${signingSecret(config)}:pin-check`;
-  const [actual, expected] = await Promise.all([
+  return secretMatches(
+    value,
+    config.pin,
+    `${signingSecret(config)}:pin-check`,
+    6,
+  );
+}
+
+export async function secretMatches(
+  value: unknown,
+  expected: string,
+  comparisonSecret: string,
+  minimumLength = 12,
+) {
+  if (
+    typeof value !== "string" ||
+    value.length < minimumLength ||
+    value.length > 128 ||
+    expected.length < minimumLength ||
+    expected.length > 128
+  ) {
+    return false;
+  }
+  const [actual, expectedSignature] = await Promise.all([
     sign(value, comparisonSecret),
-    sign(config.pin, comparisonSecret),
+    sign(expected, comparisonSecret),
   ]);
-  return safeEqual(actual, expected);
+  return safeEqual(actual, expectedSignature);
 }
 
 export async function createSessionToken(
   config: GuestSessionConfig,
   now = Math.floor(Date.now() / 1_000),
+  sessionSeconds = GUEST_SESSION_SECONDS,
 ) {
-  const expiresAt = now + GUEST_SESSION_SECONDS;
+  const expiresAt = now + sessionSeconds;
   const randomBytes = crypto.getRandomValues(new Uint8Array(18));
   const nonce = encodeBase64Url(randomBytes.buffer as ArrayBuffer);
   const payload = `${expiresAt}.${nonce}`;
