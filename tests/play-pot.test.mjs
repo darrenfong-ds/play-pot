@@ -86,7 +86,12 @@ test("keeps all operational data on one device", async () => {
     /over-capacity-alert|target-capacity-alert|result-overflow|result-block/,
   );
   assert.match(client, /!fits \? "commit-overflow" : ""/);
-  assert.match(client, /TARGET/);
+  assert.doesNotMatch(client, /\bTARGET\b/);
+  assert.match(client, /\/ \{CAPACITY\} PAX/);
+  assert.match(
+    client,
+    /slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"/,
+  );
   assert.match(client, /MAX PAX/);
   assert.match(client, /Recently OUT/);
   assert.match(client, /RESTORE/);
@@ -101,6 +106,10 @@ test("keeps all operational data on one device", async () => {
   assert.doesNotMatch(client, /RESET 15/);
   assert.doesNotMatch(client, /\+5 MIN/);
   assert.doesNotMatch(client, /LIVE TOTAL AFTER SAVE/);
+  assert.doesNotMatch(client, /recommended \/ no names/);
+  assert.match(client, /\{selectedPax\} PAX FITS/);
+  assert.doesNotMatch(client, /to target after entry/);
+  assert.match(client, /activeFamilies\.length === 1 \? "FAMILY" : "FAMILIES"/);
   assert.match(client, /Decrease time limit by 1 minute/);
   assert.match(client, /Extend time limit by 1 minute/);
   assert.match(client, /SAVE COUNT CORRECTION/);

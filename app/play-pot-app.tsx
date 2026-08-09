@@ -1062,7 +1062,7 @@ export default function PlayPotApp() {
   const recentlyOut = recentOutFamilies(state, now);
   const paxInside = currentPax(state);
   const remaining = spacesLeft(state);
-  const toTarget = Math.max(0, remaining);
+  const slotsLeftToFifteen = Math.max(0, remaining);
   const selectedPax = customAdults + customChildren;
   const projectedPax = paxInside + selectedPax;
   const fits = projectedPax <= CAPACITY;
@@ -1097,11 +1097,17 @@ export default function PlayPotApp() {
         <div className="capacity-row">
           <div className="capacity-number">
             <strong>{paxInside}</strong>
-            <span>/ {CAPACITY} TARGET</span>
+            <span>/ {CAPACITY} PAX</span>
           </div>
           <div className="spaces-card">
-            <strong>{paxInside <= CAPACITY ? toTarget : FLEX_CAPACITY}</strong>
-            <span>{paxInside <= CAPACITY ? "TO TARGET" : "MAX PAX"}</span>
+            <strong>
+              {paxInside <= CAPACITY ? slotsLeftToFifteen : FLEX_CAPACITY}
+            </strong>
+            <span>
+              {paxInside <= CAPACITY
+                ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT TO ${CAPACITY} PAX`
+                : "MAX PAX"}
+            </span>
           </div>
         </div>
 
@@ -1153,7 +1159,7 @@ export default function PlayPotApp() {
 
             <div className="quick-details">
               <label className="field-label" htmlFor="visual-input">
-                Visual <span>recommended / no names</span>
+                Visual
               </label>
               <input
                 id="visual-input"
@@ -1169,7 +1175,6 @@ export default function PlayPotApp() {
             {fits ? (
               <div className="admission-result result-fit">
                 <strong>{selectedPax} PAX FITS</strong>
-                <span>{CAPACITY - projectedPax} to target after entry</span>
               </div>
             ) : null}
 
@@ -1206,7 +1211,10 @@ export default function PlayPotApp() {
         <section className="operating-section" aria-labelledby="inside-title">
           <div className="section-heading">
             <h2 id="inside-title">Inside now</h2>
-            <span className="section-count">{activeFamilies.length} FAMILIES</span>
+            <span className="section-count">
+              {activeFamilies.length}{" "}
+              {activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"}
+            </span>
           </div>
 
           {recentlyOut.length ? (

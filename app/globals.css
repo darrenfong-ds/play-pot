@@ -287,11 +287,14 @@ html[data-theme="dark"] .theme-toggle-orb {
 }
 
 .spaces-card span {
+  max-width: 100%;
   margin-top: 0.3rem;
   color: #c7dcdb;
   font-size: 0.62rem;
   font-weight: 900;
+  line-height: 1.25;
   letter-spacing: 0.07em;
+  text-align: center;
 }
 
 .storage-alert {
@@ -421,7 +424,7 @@ html[data-theme="dark"] .theme-toggle-orb {
 }
 
 .admission-result {
-  min-height: 59px;
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -435,11 +438,6 @@ html[data-theme="dark"] .theme-toggle-orb {
   font-size: 0.79rem;
   font-weight: 950;
   letter-spacing: 0.045em;
-}
-
-.admission-result span {
-  color: var(--muted);
-  font-size: 0.74rem;
 }
 
 .result-fit {

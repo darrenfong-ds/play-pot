@@ -7,9 +7,9 @@ The site is an installable web app. Staff use the shared six-digit guest PIN to 
 ## Operating rules
 
 - Capacity is derived only from families shown under `Inside now`.
-- The operating target remains 15 pax.
-- Entry above the 15-pax target uses one simple red button and a second confirmation. New entry above the maximum of 20 is always blocked.
-- Each family starts with a 15-minute limit. Under `Edit`, staff can adjust the limit one minute at a time. A count increase above the 15-pax target still needs confirmation.
+- The normal Play Pot count is 15 pax.
+- Entry above 15 pax uses one simple red button and a second confirmation. New entry above the maximum of 20 is always blocked.
+- Each family starts with a 15-minute limit. Under `Edit`, staff can adjust the limit one minute at a time. A count increase above 15 pax still needs confirmation.
 - Family numbers are allocated only on successful entry and continue on that phone.
 - The `ENTER FAMILY` button locks for 700 milliseconds after the first tap and shows `RECORDED` after a verified phone save. This prevents a rapid double tap without slowing the next family.
 - Adult and child counts are entered directly before admission. The visual identifier is optional.
