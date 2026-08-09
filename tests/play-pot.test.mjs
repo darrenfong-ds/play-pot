@@ -137,12 +137,16 @@ test("keeps all operational data on one device", async () => {
     client,
     /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*DUE \{formatClock\(familyDueAt\(family\)\)\} &middot;\{" "\}[\s\S]*\{family\.timeLimitMinutes\} MIN/,
   );
+  assert.match(css, /\.family-times\s*\{[\s\S]*?color: var\(--ink\);/);
+  assert.doesNotMatch(css, /\.family-times span:last-child/);
   assert.doesNotMatch(client, /-5 MIN/);
   assert.doesNotMatch(client, /RESET 15/);
   assert.doesNotMatch(client, /\+5 MIN/);
   assert.doesNotMatch(client, /LIVE TOTAL AFTER SAVE/);
   assert.doesNotMatch(client, /recommended \/ no names/);
-  assert.match(client, /\{selectedPax\} PAX FITS/);
+  assert.match(client, /`ENTER: \$\{selectedPax\} PAX`/);
+  assert.doesNotMatch(client, /PAX FITS|ENTER FAMILY/);
+  assert.doesNotMatch(css, /admission-result|result-fit/);
   assert.doesNotMatch(client, /to target after entry/);
   assert.match(client, /activeFamilies\.length === 1 \? "FAMILY" : "FAMILIES"/);
   assert.match(client, /Decrease time limit by 1 minute/);

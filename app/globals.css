@@ -341,28 +341,6 @@ input::placeholder {
   border-color: var(--teal);
 }
 
-.admission-result {
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.12rem;
-  margin-top: 0.85rem;
-  padding: 0.65rem 0.8rem;
-  border-radius: 12px;
-}
-
-.admission-result strong {
-  font-size: 0.79rem;
-  font-weight: 950;
-  letter-spacing: 0.045em;
-}
-
-.result-fit {
-  border: 1px solid var(--teal);
-  background: var(--green-soft);
-}
-
 .commit-family-button {
   width: 100%;
   min-height: 62px;
@@ -507,13 +485,9 @@ input::placeholder {
   align-items: flex-start;
   gap: 0.16rem;
   margin-top: 0.68rem;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 0.76rem;
   font-weight: 800;
-}
-
-.family-times span:last-child {
-  color: var(--ink);
 }
 
 .visual-note {

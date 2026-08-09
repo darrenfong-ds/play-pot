@@ -1074,12 +1074,6 @@ export default function PlayPotApp() {
               />
             </div>
 
-            {fits ? (
-              <div className="admission-result result-fit">
-                <strong>{selectedPax} PAX FITS</strong>
-              </div>
-            ) : null}
-
             <button
               type="button"
               className={`commit-family-button ${
@@ -1099,10 +1093,8 @@ export default function PlayPotApp() {
                 ? entryRecorded
                   ? "RECORDED ✓"
                   : "PLEASE WAIT..."
-                : fits
-                ? `ENTER FAMILY / ${selectedPax} PAX`
-                : canFlex
-                  ? `ENTER FAMILY / ${selectedPax} PAX`
+                : fits || canFlex
+                  ? `ENTER: ${selectedPax} PAX`
                   : paxInside >= FLEX_CAPACITY
                     ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
                     : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
