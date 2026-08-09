@@ -1024,8 +1024,8 @@ export default function PlayPotApp() {
             </button>
           </form>
           <small>
-            Each phone controls its own tracker. Live operational entries are
-            visible to the tool owner. Do not enter names or contact details.
+            Each phone controls its own tracker. Read-only live view active. No
+            names or contact details.
           </small>
         </section>
       </main>
