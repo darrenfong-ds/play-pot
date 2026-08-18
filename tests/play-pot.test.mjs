@@ -155,10 +155,17 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(css, /data-theme="dark"|theme-toggle|guest-theme-row/);
   assert.match(
     client,
-    /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*DUE \{formatClock\(familyDueAt\(family\)\)\} &middot;\{" "\}[\s\S]*\{family\.timeLimitMinutes\} MIN/,
+    /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*className="family-due-time"[\s\S]*DUE \{formatClock\(familyDueAt\(family\)\)\}/,
   );
-  assert.match(css, /\.family-times\s*\{[\s\S]*?color: var\(--ink\);/);
-  assert.doesNotMatch(css, /\.family-times span:last-child/);
+  assert.doesNotMatch(
+    client,
+    /DUE \{formatClock\(familyDueAt\(family\)\)\}[\s\S]*\{family\.timeLimitMinutes\} MIN/,
+  );
+  assert.match(
+    css,
+    /\.family-times\s*\{[\s\S]*?grid-template-columns:[\s\S]*?font-size: 0\.9rem;/,
+  );
+  assert.match(css, /\.family-due-time\s*\{[\s\S]*?color: var\(--due-time\);/);
   assert.doesNotMatch(client, /-5 MIN/);
   assert.doesNotMatch(client, /RESET 15/);
   assert.doesNotMatch(client, /\+5 MIN/);

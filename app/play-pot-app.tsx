@@ -299,9 +299,8 @@ function ActiveFamilyCard({
 
       <div className="family-times">
         <span>IN {formatClock(family.enteredAt)}</span>
-        <span>
-          DUE {formatClock(familyDueAt(family))} &middot;{" "}
-          {family.timeLimitMinutes} MIN
+        <span className="family-due-time">
+          DUE {formatClock(familyDueAt(family))}
         </span>
       </div>
 
