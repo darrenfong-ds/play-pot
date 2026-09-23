@@ -106,7 +106,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(client, /return `#\$\{family\.familyNumber\}`/);
   assert.match(
     client,
-    /\{familyLabel\(family\)\} · \{familyPax\(family\)\} pax/,
+    /\{familyLabel\(family\)\} · \{familyPax\(family\)\} people/,
   );
   assert.match(client, /family\.adults === 1 \? "adult" : "adults"/);
   assert.match(client, /family\.children === 1 \? "child" : "children"/);
@@ -119,16 +119,16 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   );
   assert.match(client, /!fits \? "commit-overflow" : ""/);
   assert.doesNotMatch(client, /\bTARGET\b/);
-  assert.match(client, /\/ \{CAPACITY\} pax/);
+  assert.match(client, /\/ \{CAPACITY\} people/);
   assert.match(
     client,
     /paxInside >= CAPACITY \? "capacity-full" : "capacity-safe"/,
   );
   assert.match(css, /\.capacity-number\.capacity-safe strong/);
   assert.match(css, /\.capacity-number\.capacity-full strong/);
-  assert.match(client, /\? "pax left"/);
-  assert.match(client, /`left to \$\{FLEX_CAPACITY\}`/);
-  assert.match(client, /`full at \$\{FLEX_CAPACITY\}`/);
+  assert.match(client, /\$\{slotsLeftToFifteen === 1 \? "space" : "spaces"\} left/);
+  assert.match(client, /`left, max \$\{FLEX_CAPACITY\}`/);
+  assert.match(client, /: "full"\}/);
   assert.doesNotMatch(client, /LEFT TO \$\{CAPACITY\} PAX/);
   assert.match(client, /Checked out/);
   assert.match(client, /Put back inside/);
@@ -149,7 +149,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   // The OUT notice keeps the default 10-second UNDO window.
   assert.match(
     client,
-    /pax freed`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
+    /people left Play Pot`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
   );
   assert.match(client, /Added ✓/);
   assert.match(client, /Next due/);
@@ -176,7 +176,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(client, /\+5 MIN/);
   assert.doesNotMatch(client, /LIVE TOTAL AFTER SAVE/);
   assert.doesNotMatch(client, /recommended \/ no names/);
-  assert.match(client, /`Enter \$\{selectedPax\} pax`/);
+  assert.match(client, /`Enter \$\{selectedPax\} people`/);
   assert.doesNotMatch(client, /PAX FITS|ENTER FAMILY/);
   assert.doesNotMatch(css, /admission-result|result-fit/);
   assert.doesNotMatch(client, /to target after entry/);
@@ -185,7 +185,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(client, /Decrease time limit by 1 minute/);
   assert.match(client, /Extend time limit by 1 minute/);
   assert.match(client, /Save this count change\?/);
-  assert.match(client, /Last 15 min · put a family back if OUT was a mistake/);
+  assert.match(client, /Last 15 min · put a family back if checked out by mistake/);
   assert.doesNotMatch(client, /deletes in \d|delete(?:s|d)? in \{?/i);
   assert.match(
     client,

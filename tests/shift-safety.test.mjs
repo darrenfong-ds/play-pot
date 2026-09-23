@@ -119,6 +119,7 @@ test("shows the blocked entry button at full opacity with readable contrast", as
   assert.match(cssRule(css, ".commit-family-button:disabled"), /opacity: 1;/);
   assert.doesNotMatch(css, /opacity: 0\.72/);
   assert.match(client, /!fits \? "commit-overflow" : ""/);
+  assert.match(client, /!fits && !canFlex \? "commit-blocked" : ""/);
   assert.match(client, /Only \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} more/);
 
   const luminance = (hex) => {
@@ -130,10 +131,18 @@ test("shows the blocked entry button at full opacity with readable contrast", as
     });
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
+  // Blocked entry is red with white text.
   const coralFill = css.match(/--coral-fill: (#[0-9a-f]{6});/i)[1];
-  assert.match(cssRule(css, ".commit-overflow"), /background: var\(--coral-fill\);/);
+  assert.match(cssRule(css, ".commit-blocked"), /background: var\(--coral-fill\);/);
   const contrast = 1.05 / (luminance(coralFill) + 0.05);
   assert.ok(contrast >= 4.5, `white on ${coralFill} is ${contrast.toFixed(2)}:1`);
+
+  // Entry above 15 (with its second confirmation) is amber with dark text.
+  const amber = css.match(/--amber: (#[0-9a-f]{6});/i)[1];
+  const ink = css.match(/--ink: (#[0-9a-f]{6});/i)[1];
+  assert.match(cssRule(css, ".commit-overflow"), /background: var\(--amber\);\s*color: var\(--ink\);/);
+  const amberContrast = (luminance(amber) + 0.05) / (luminance(ink) + 0.05);
+  assert.ok(amberContrast >= 4.5, `${ink} on ${amber} is ${amberContrast.toFixed(2)}:1`);
 });
 
 test("allows pinch zoom", async () => {

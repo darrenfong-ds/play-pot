@@ -19,7 +19,12 @@
   --field-line: #879493;
   --header: #12313a;
   --header-soft: #214852;
+  /*
+   * One colour, one meaning. Teal: add or safe. Amber: over the normal 15, or
+   * overdue. Red: leave, remove, or the hard stop at 20.
+   */
   --capacity-safe: #63e6aa;
+  --capacity-over: #f4bd45;
   --capacity-full: #ff8178;
   --aqua: #5be0cc;
   --teal: #0b7d72;
@@ -190,6 +195,10 @@ input::placeholder {
 }
 
 .capacity-number.capacity-full strong {
+  color: var(--capacity-over);
+}
+
+.capacity-number.capacity-max strong {
   color: var(--capacity-full);
 }
 
@@ -267,7 +276,7 @@ input::placeholder {
 }
 
 .storage-alert {
-  background: #8b5b05;
+  background: var(--coral-dark);
 }
 
 /*
@@ -284,6 +293,7 @@ input::placeholder {
   justify-content: flex-end;
   margin-inline: auto;
   padding: 0.6rem 0.6rem calc(10.75rem + env(safe-area-inset-bottom));
+  padding-top: 38vh;
 }
 
 .recent-out-section {
@@ -429,7 +439,13 @@ input::placeholder {
 }
 
 .commit-overflow {
+  background: var(--amber);
+  color: var(--ink);
+}
+
+.commit-blocked {
   background: var(--coral-fill);
+  color: #fff;
 }
 
 .commit-recorded {
@@ -544,7 +560,7 @@ input::placeholder {
 
 .family-list {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
 }
 
 /*
@@ -557,7 +573,7 @@ input::placeholder {
   grid-template-columns: 4.1rem minmax(0, 1fr) 4.6rem;
   grid-auto-flow: row dense;
   gap: 0.55rem;
-  padding: 0.55rem;
+  padding: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--surface);
@@ -635,7 +651,11 @@ input::placeholder {
   align-items: center;
   padding: 0.3rem 0.2rem;
   border-radius: 14px;
-  background: var(--surface-soft);
+  background: linear-gradient(
+    to top,
+    rgba(11, 116, 107, 0.2) var(--used, 0%),
+    var(--surface-soft) var(--used, 0%)
+  );
   color: var(--ink);
   text-align: center;
 }
@@ -673,10 +693,10 @@ input::placeholder {
   gap: 0.25rem 0.75rem;
   margin: 0;
   padding: 0.4rem 0.6rem;
-  border-left: 4px solid var(--coral);
+  border-left: 4px solid var(--amber-strong);
   border-radius: 8px;
-  background: var(--red-soft);
-  color: var(--coral-dark);
+  background: var(--surface);
+  color: var(--due-overdue);
   font-size: 0.8rem;
   font-weight: 750;
   letter-spacing: 0.025em;
@@ -1261,6 +1281,11 @@ input::placeholder {
   color: var(--due-overdue);
 }
 
+.confirm-dialog-overflow .confirm-yes {
+  background: var(--amber);
+  color: var(--ink);
+}
+
 /* Safe, reversible confirmations get a teal YES; red stays for OUT and deletes. */
 .confirm-dialog-safe {
   border-top-color: var(--teal);
@@ -1747,6 +1772,20 @@ input::placeholder {
     padding-inline: 0.55rem;
   }
 
+  /* Narrow header: the word sits under the icon so it never reads as "refresh". */
+  .reset-button {
+    width: 3rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.05rem;
+    padding: 0;
+  }
+
+  .reset-label {
+    font-size: 0.68rem;
+    line-height: 1;
+  }
+
   .capacity-row {
     gap: 0.5rem;
     padding-inline: 0.75rem;
@@ -1801,6 +1840,10 @@ input::placeholder {
   .family-times {
     grid-template-columns: auto;
     gap: 0;
+  }
+
+  .family-times span:first-child {
+    display: none;
   }
 }
 

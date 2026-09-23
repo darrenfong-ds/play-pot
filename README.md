@@ -7,15 +7,16 @@ The site is an installable web app. Staff use the shared six-digit staff PIN to 
 ## Operating rules
 
 - Capacity is derived only from families shown under `Inside now`.
-- The normal Play Pot count is 15 pax.
-- Entry above 15 pax uses one simple red button and a second confirmation. New entry above the maximum of 20 is always blocked.
+- The normal Play Pot count is 15 pax (the app shows pax to staff as "people").
+- Entry above 15 pax uses one simple amber button and a second confirmation. New entry above the maximum of 20 is always blocked, shown in red.
+- Colours keep one meaning each: teal for adding or safe actions, amber for over the normal 15 or overdue, red for checking out, deleting, resetting, or the stop at 20.
 - Each family starts with a 15-minute limit. Tapping a family's details opens `Edit`, where staff can adjust the limit one minute at a time. A count increase above 15 pax still needs confirmation.
 - Family numbers are allocated only on successful entry. They continue while an active or recent recovery record exists, then restart at #1 when the tracker is completely empty.
 - The entry button locks for 700 milliseconds after the first tap and shows `Added ✓` after a verified phone save. This prevents a rapid double tap without slowing the next family.
 - Adult and child counts are entered directly before admission. The visual identifier is optional.
 - Visual identifiers should be short, neutral clothing or object descriptions. Do not record names, ethnicity, nationality, ticket numbers, photos, or dates of birth.
 - A compact `Next due` strip always points to the family whose timer reaches its limit first. It is an indicator only and never performs an automatic OUT.
-- Families are listed by due time: the family due next is at the bottom, directly above the `Enter` button, and newer families are higher up.
+- Families are listed by due time: the family due next is at the bottom, directly above the `Enter` button, and newer families are higher up. Space above the list lets staff pull any family down into thumb reach, and each timer fills up as its time is used.
 
 ## Device memory and read-only live view
 
