@@ -341,8 +341,12 @@ export function familyDueAt(family: Family) {
   ).toISOString();
 }
 
-export function nextDueLocalFamily(state: PlayPotState) {
+export function nextDueLocalFamily(
+  state: PlayPotState,
+  isExcluded: (family: Family) => boolean = () => false,
+) {
   return insideFamilies(state).reduce<Family | null>((earliest, family) => {
+    if (isExcluded(family)) return earliest;
     if (!earliest) return family;
     const dueDifference =
       Date.parse(familyDueAt(family)) - Date.parse(familyDueAt(earliest));

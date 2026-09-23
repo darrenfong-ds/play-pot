@@ -39,6 +39,13 @@ export function formatShortDate(value: string) {
   return shortDateFormat.format(new Date(value));
 }
 
+// Past an hour, whole hours are easier to read than "+1545 MIN OVER".
+export function formatMinutesOver(minutesOver: number) {
+  return minutesOver > 60
+    ? `+${Math.floor(minutesOver / 60)} HR OVER`
+    : `+${minutesOver} MIN OVER`;
+}
+
 // Display-only check. It never changes, removes, or checks out a family.
 export function isFromEarlierDay(enteredAt: string, now: number) {
   return singaporeDateKey(enteredAt) < singaporeDateKey(now);

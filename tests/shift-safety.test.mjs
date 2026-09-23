@@ -19,6 +19,49 @@ function toPixels(value) {
   return Number(match[1]) * (match[2] === "rem" ? 16 : 1);
 }
 
+test("keeps earlier-day families out of NEXT DUE and shows long overdue times in hours", async () => {
+  const core = await import(new URL("../app/play-pot-local.ts", import.meta.url));
+  const time = await import(new URL("../app/time-format.ts", import.meta.url));
+  // 23:00 on 7 Aug and 10:00 on 8 Aug, Singapore time.
+  const yesterday = Date.parse("2026-08-07T15:00:00.000Z");
+  const today = Date.parse("2026-08-08T02:00:00.000Z");
+  let state = core.addLocalFamily(
+    core.createInitialState(yesterday, "next-due-shift"),
+    { adults: 1, children: 1, visual: "grey hoodie" },
+    "forgotten-family",
+    yesterday,
+  );
+  state = core.addLocalFamily(
+    state,
+    { adults: 2, children: 1, visual: "blue stroller" },
+    "today-family",
+    today,
+  );
+  const now = today + 20 * 60_000;
+  const earlierDay = (family) => time.isFromEarlierDay(family.enteredAt, now);
+
+  assert.equal(core.nextDueLocalFamily(state).id, "forgotten-family");
+  assert.equal(core.nextDueLocalFamily(state, earlierDay).id, "today-family");
+  assert.equal(core.insideFamilies(state).length, 2);
+  assert.equal(core.currentPax(state), 5);
+
+  const onlyForgotten = core.markLocalFamilyOut(state, "today-family", now);
+  assert.equal(core.nextDueLocalFamily(onlyForgotten, earlierDay), null);
+
+  assert.equal(time.formatMinutesOver(1), "+1 MIN OVER");
+  assert.equal(time.formatMinutesOver(60), "+60 MIN OVER");
+  assert.equal(time.formatMinutesOver(61), "+1 HR OVER");
+  assert.equal(time.formatMinutesOver(1545), "+25 HR OVER");
+
+  const client = await readSource("app/play-pot-app.tsx");
+  assert.match(
+    client,
+    /nextDueLocalFamily\(state, \(family\) =>\s*isFromEarlierDay\(family\.enteredAt, now\),?\s*\)/,
+  );
+  assert.match(client, /label: formatMinutesOver\(minutesOver\)/);
+  assert.match(client, /className="stale-entry-flag"/);
+});
+
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
   const [client, css] = await Promise.all([
     readSource("app/play-pot-app.tsx"),

@@ -38,7 +38,12 @@ import {
   LIVE_DEVICE_STORAGE_KEY,
   LIVE_HEARTBEAT_MILLISECONDS,
 } from "./live-view-core";
-import { formatClock, formatShortDate, isFromEarlierDay } from "./time-format";
+import {
+  formatClock,
+  formatMinutesOver,
+  formatShortDate,
+  isFromEarlierDay,
+} from "./time-format";
 
 type UndoAction = {
   id: string;
@@ -91,7 +96,7 @@ function timerState(family: Family, now: number) {
   if (minutesOver < 1) {
     return { label: `${family.timeLimitMinutes} MIN REACHED`, overdue: true };
   }
-  return { label: `+${minutesOver} MIN OVER`, overdue: true };
+  return { label: formatMinutesOver(minutesOver), overdue: true };
 }
 
 function Stepper({
@@ -1079,7 +1084,10 @@ export default function PlayPotApp() {
       editCandidate.adults +
       editCandidate.children
     : paxInside;
-  const nextDueFamily = nextDueLocalFamily(state);
+  // Earlier-day families keep their card flag but must not hide today's next due.
+  const nextDueFamily = nextDueLocalFamily(state, (family) =>
+    isFromEarlierDay(family.enteredAt, now),
+  );
   const nextDueTimer = nextDueFamily
     ? timerState(nextDueFamily, now)
     : null;
