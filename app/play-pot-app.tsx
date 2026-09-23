@@ -353,6 +353,7 @@ export default function PlayPotApp() {
   const [restoreCandidate, setRestoreCandidate] = useState<Family | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Family | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [confirmStartFresh, setConfirmStartFresh] = useState(false);
   const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
   const [entryLocked, setEntryLocked] = useState(false);
   const [entryRecorded, setEntryRecorded] = useState(false);
@@ -665,6 +666,7 @@ export default function PlayPotApp() {
     deleteCandidate,
     confirmDeleteAll,
     editCandidate,
+    confirmStartFresh,
   ]);
 
   useEffect(() => {
@@ -674,7 +676,8 @@ export default function PlayPotApp() {
       !restoreCandidate &&
       !deleteCandidate &&
       !confirmDeleteAll &&
-      !editCandidate
+      !editCandidate &&
+      !confirmStartFresh
     ) {
       return;
     }
@@ -687,6 +690,7 @@ export default function PlayPotApp() {
         setDeleteCandidate(null);
         setConfirmDeleteAll(false);
         setEditCandidate(null);
+        setConfirmStartFresh(false);
         const returnTarget = confirmationReturnFocusRef.current;
         confirmationReturnFocusRef.current = null;
         window.setTimeout(() => returnTarget?.focus(), 0);
@@ -725,6 +729,7 @@ export default function PlayPotApp() {
     deleteCandidate,
     confirmDeleteAll,
     editCandidate,
+    confirmStartFresh,
   ]);
 
   function cancelOpenConfirmation() {
@@ -734,6 +739,7 @@ export default function PlayPotApp() {
     setDeleteCandidate(null);
     setConfirmDeleteAll(false);
     setEditCandidate(null);
+    setConfirmStartFresh(false);
     const returnTarget = confirmationReturnFocusRef.current;
     confirmationReturnFocusRef.current = null;
     window.setTimeout(() => returnTarget?.focus(), 0);
@@ -1069,9 +1075,58 @@ export default function PlayPotApp() {
         <div className="brand-mark">PP</div>
         <h1>CHECK THIS PHONE</h1>
         <p>The saved record cannot be read safely.</p>
-        <button type="button" onClick={handleStartFresh}>
+        <button
+          type="button"
+          onClick={(event) => {
+            confirmationReturnFocusRef.current = event.currentTarget;
+            confirmationHandledRef.current = false;
+            setConfirmStartFresh(true);
+          }}
+        >
           START FRESH ON THIS PHONE
         </button>
+
+        {confirmStartFresh ? (
+          <div className="confirm-overlay">
+            <section
+              ref={confirmationDialogRef}
+              className="confirm-dialog confirm-dialog-delete"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="confirm-start-fresh-title"
+              aria-describedby="confirm-start-fresh-copy"
+            >
+              <h2 id="confirm-start-fresh-title">START FRESH ON THIS PHONE?</h2>
+              <p id="confirm-start-fresh-copy">
+                This replaces this phone&apos;s unreadable Play Pot record with
+                an empty one. Families recorded on it will no longer show. This
+                cannot be undone.
+              </p>
+              <div className="confirm-actions">
+                <button
+                  ref={cancelConfirmationRef}
+                  type="button"
+                  className="confirm-no"
+                  onClick={handleConfirmationNo}
+                >
+                  NO
+                </button>
+                <button
+                  type="button"
+                  className="confirm-yes"
+                  onClick={() => {
+                    if (!claimConfirmation()) return;
+                    setConfirmStartFresh(false);
+                    confirmationReturnFocusRef.current = null;
+                    handleStartFresh();
+                  }}
+                >
+                  YES, START FRESH
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </main>
     );
   }

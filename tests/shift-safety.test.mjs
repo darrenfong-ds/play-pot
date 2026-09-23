@@ -88,6 +88,29 @@ test("ignores taps on every confirmation for 400 ms after it opens", async () =>
   );
 });
 
+test("asks NO / YES before starting fresh on this phone", async () => {
+  const client = await readSource("app/play-pot-app.tsx");
+  const recovery = client.slice(
+    client.indexOf("if (recoveryRequired) {"),
+    client.indexOf("if (!state) {"),
+  );
+  assert.doesNotMatch(client, /onClick=\{handleStartFresh\}/);
+  assert.equal(client.match(/handleStartFresh\(\);/g)?.length, 1);
+  assert.match(recovery, /setConfirmStartFresh\(true\)/);
+  assert.match(
+    recovery,
+    /if \(!claimConfirmation\(\)\) return;\s*setConfirmStartFresh\(false\);\s*confirmationReturnFocusRef\.current = null;\s*handleStartFresh\(\);/,
+  );
+  assert.match(
+    recovery,
+    /confirm-start-fresh-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, START FRESH\s*</,
+  );
+  // Escape, NO, and the dialog lifecycle all know about this confirmation.
+  assert.equal(client.match(/setConfirmStartFresh\(false\);/g)?.length, 3);
+  assert.equal(client.match(/\n\s*confirmStartFresh,\n/g)?.length, 2);
+  assert.match(client, /!editCandidate &&\s*!confirmStartFresh/);
+});
+
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
   const [client, css] = await Promise.all([
     readSource("app/play-pot-app.tsx"),
