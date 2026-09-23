@@ -183,10 +183,23 @@ input::placeholder {
   color: var(--capacity-full);
 }
 
-.capacity-number span {
+.capacity-detail {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.capacity-detail span:first-child {
   color: #cee0df;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
+}
+
+.capacity-detail span:last-child {
+  color: #a9c4c3;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .spaces-card {
@@ -505,9 +518,17 @@ input::placeholder {
   gap: 0.5rem;
 }
 
+/*
+ * One row per family: timer | details (tap to edit) | OUT. The timers line up
+ * in one column to scan, and OUT is a full-height button on the thumb side.
+ * Dense flow lets OUT come before the editor in the DOM but sit on the right.
+ */
 .family-card {
-  overflow: hidden;
-  padding: 0.55rem 0.65rem 0.6rem;
+  display: grid;
+  grid-template-columns: 4.1rem minmax(0, 1fr) 4.6rem;
+  grid-auto-flow: row dense;
+  gap: 0.5rem;
+  padding: 0.45rem;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
@@ -525,48 +546,65 @@ input::placeholder {
   outline-offset: 2px;
 }
 
-.family-main {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.65rem;
+.family-card > .stale-entry-flag {
+  grid-column: 1 / -1;
 }
 
-.family-id-block {
+.family-card > .timer-pill {
+  grid-column: 1;
+}
+
+.family-card > .family-editor {
+  grid-column: 2;
+}
+
+.family-card > .out-button {
+  grid-column: 3;
+}
+
+/* While editing, the editor gets its own row and OUT widens beside the timer, far from SAVE. */
+.family-card:has(.family-editor[open]) > .family-editor {
+  grid-column: 1 / -1;
+}
+
+.family-card:has(.family-editor[open]) > .out-button {
+  grid-column: 2 / -1;
+  min-height: 3rem;
+}
+
+.family-details {
   min-width: 0;
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
+/* The adult/child breakdown drops to its own line rather than being cut off. */
 .family-id-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.5rem;
-  align-items: baseline;
+  display: block;
 }
 
 .family-id {
-  font-size: 0.92rem;
+  margin-right: 0.4rem;
+  font-size: 0.85rem;
   font-weight: 900;
 }
 
 .family-pax {
+  display: inline-block;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .timer-pill {
-  min-width: 4.9rem;
+  min-width: 0;
   display: flex;
-  flex: none;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  align-self: stretch;
-  padding: 0.3rem 0.45rem;
+  padding: 0.3rem 0.2rem;
   border-radius: 11px;
   background: var(--surface-soft);
   color: var(--ink);
@@ -574,16 +612,16 @@ input::placeholder {
 }
 
 .timer-pill strong {
-  font-size: 1.6rem;
+  font-size: 1.55rem;
   font-weight: 900;
   line-height: 1;
 }
 
 .timer-pill span {
   margin-top: 0.15rem;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 800;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -598,13 +636,13 @@ input::placeholder {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.25rem 0.75rem;
-  margin: 0 0 0.75rem;
-  padding: 0.5rem 0.63rem;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
   border-left: 4px solid var(--coral);
   border-radius: 8px;
   background: var(--red-soft);
   color: var(--coral-dark);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 900;
   letter-spacing: 0.025em;
   line-height: 1.2;
@@ -613,10 +651,10 @@ input::placeholder {
 
 .family-times {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: auto auto;
+  justify-content: start;
   align-items: baseline;
-  gap: 0.5rem;
-  margin-top: 0.15rem;
+  gap: 0.75rem;
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 900;
@@ -630,19 +668,24 @@ input::placeholder {
 
 .family-due-time {
   color: var(--due-time);
-  text-align: right;
 }
 
 .family-card-due .family-due-time {
   color: var(--due-overdue);
 }
 
-/* What they're wearing is what staff match against the room, so it leads the card. */
+/* What they're wearing is what staff match against the room, so it leads the row. */
+/* Two lines at most: a long description wraps instead of being cut off. */
 .visual-note {
-  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  padding-right: 2.1rem;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 800;
   line-height: 1.2;
 }
@@ -653,33 +696,18 @@ input::placeholder {
   font-weight: 600;
 }
 
-/* A small Edit on the left, a wide OUT on the right where the thumb lands. */
-.family-actions {
-  display: grid;
-  grid-template-columns: 4.75rem minmax(0, 1fr);
-  align-items: start;
-  gap: 0.5rem;
-  margin-top: 0.45rem;
-}
-
 .family-editor {
-  border: 1.5px solid var(--field-line);
-  border-radius: 13px;
-  background: var(--surface);
+  min-width: 0;
   scroll-margin-top: 5rem;
-  scroll-margin-bottom: calc(17rem + env(safe-area-inset-bottom));
+  scroll-margin-bottom: calc(11rem + env(safe-area-inset-bottom));
 }
 
 .family-editor summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem;
+  position: relative;
+  display: block;
+  padding: 0.1rem 0;
   cursor: pointer;
   color: var(--ink);
-  font-size: 0.95rem;
-  font-weight: 800;
   list-style: none;
 }
 
@@ -687,32 +715,38 @@ input::placeholder {
   display: none;
 }
 
-.family-editor[open] {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-
-.family-editor[open] summary {
-  justify-content: space-between;
-  padding-inline: 0.8rem;
+.edit-cue {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1.75rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--field-line);
+  border-radius: 7px;
+  background: var(--surface);
   color: var(--muted);
 }
 
-.family-editor[open] summary::after {
-  content: "Close";
-  font-size: 0.85rem;
+.edit-cue-open {
+  width: auto;
+  padding: 0 0.5rem;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 800;
 }
 
-/* While editing, OUT stays on top so SAVE and OUT are never neighbours. */
-.family-editor[open] + .out-button {
-  grid-column: 1 / -1;
-  grid-row: 1;
+.family-editor[open] summary {
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
 }
 
 .editor-body {
   display: grid;
   gap: 0.65rem;
-  padding: 0 0.8rem 0.8rem;
+  padding: 0 0.2rem 0.2rem;
 }
 
 .editor-steppers {
@@ -781,13 +815,14 @@ input::placeholder {
 
 .out-button {
   min-height: 44px;
+  padding: 0;
   border: 0;
   border-radius: 12px;
   background: var(--coral-fill);
   color: #fff;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 900;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
 .empty-state {
@@ -1684,14 +1719,6 @@ input::placeholder {
     font-size: 2.3rem;
   }
 
-  .family-actions {
-    grid-template-columns: 4.25rem minmax(0, 1fr);
-  }
-
-  .timer-pill {
-    min-width: 4.4rem;
-  }
-
   .next-due {
     gap: 0.4rem;
     padding-inline: 0.6rem;
@@ -1707,6 +1734,27 @@ input::placeholder {
 
   .commit-family-button {
     font-size: 0.92rem;
+  }
+}
+
+/* 320-wide phones: tighter columns, and IN and DUE on two lines. */
+@media (max-width: 340px) {
+  .family-card {
+    grid-template-columns: 3.4rem minmax(0, 1fr) 3.9rem;
+    gap: 0.4rem;
+  }
+
+  .timer-pill strong {
+    font-size: 1.4rem;
+  }
+
+  .timer-pill span {
+    font-size: 0.6rem;
+  }
+
+  .family-times {
+    grid-template-columns: auto;
+    gap: 0;
   }
 }
 

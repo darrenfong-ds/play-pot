@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     pin = payload.pin;
   } catch {
     return Response.json(
-      { error: "Enter the 6-digit guest PIN." },
+      { error: "Enter the 6-digit staff PIN." },
       { status: 400, headers: noStore },
     );
   }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   try {
     if (!(await guestPinMatches(pin))) {
       return Response.json(
-        { error: "Wrong guest PIN." },
+        { error: "Wrong PIN. Check the number and try again." },
         { status: 401, headers: noStore },
       );
     }

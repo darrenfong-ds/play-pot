@@ -119,7 +119,7 @@ test("shows the blocked entry button at full opacity with readable contrast", as
   assert.match(cssRule(css, ".commit-family-button:disabled"), /opacity: 1;/);
   assert.doesNotMatch(css, /opacity: 0\.72/);
   assert.match(client, /!fits \? "commit-overflow" : ""/);
-  assert.match(client, /CANNOT ENTER \/ MAX/);
+  assert.match(client, /ONLY \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} MORE/);
 
   const luminance = (hex) => {
     const [r, g, b] = [1, 3, 5].map((index) => {

@@ -95,7 +95,7 @@ function timerState(family: Family, now: number) {
 
   const minutesOver = Math.floor((now - dueAt) / 60_000);
   if (minutesOver < 1) {
-    return { label: `${family.timeLimitMinutes} MIN REACHED`, overdue: true };
+    return { label: "DUE NOW", overdue: true };
   }
   return { label: formatMinutesOver(minutesOver), overdue: true };
 }
@@ -181,10 +181,12 @@ function CountStepper({
 
 function FamilyEditor({
   family,
+  summary,
   onSave,
   disabled,
 }: {
   family: Family;
+  summary: React.ReactNode;
   onSave: (
     adults: number,
     children: number,
@@ -224,7 +226,26 @@ function FamilyEditor({
         if (editor.open) editor.scrollIntoView({ block: "nearest" });
       }}
     >
-      <summary aria-label={`Edit ${familyLabel(family)}`}>Edit</summary>
+      {/* The whole details area opens the editor; the chip says so. */}
+      <summary aria-label={`Edit ${familyLabel(family)}`}>
+        {summary}
+        <span className={open ? "edit-cue edit-cue-open" : "edit-cue"}>
+          {open ? (
+            "Close"
+          ) : (
+            // A pencil keeps the description line wide; the summary label says "Edit".
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </span>
+      </summary>
       <div className="editor-body">
         <div className="editor-steppers">
           <Stepper
@@ -241,7 +262,7 @@ function FamilyEditor({
           />
         </div>
         <label className="field-label" htmlFor={`visual-${family.id}`}>
-          Visual identifier <span>clothing/items only</span>
+          Wearing or carrying <span>clothing/items only</span>
         </label>
         <input
           id={`visual-${family.id}`}
@@ -342,49 +363,46 @@ function ActiveFamilyCard({
           <span>IN {formatShortDate(family.enteredAt)}</span>
         </p>
       ) : null}
-      <div className="family-main">
-        <div className="family-id-block">
-          <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
-            {family.visual || "No visual yet"}
-          </p>
-          <span className="family-id-line">
-            <span className="family-id">
-              {familyLabel(family)} | {familyPax(family)} PAX
+      <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
+        <strong>{timerLead}</strong>
+        <span>{timerRest.join(" ")}</span>
+      </div>
+      <button
+        type="button"
+        className="out-button"
+        disabled={disabled}
+        onClick={(event) => onOut(event.currentTarget)}
+        aria-label={`Check ${familyLabel(family)} out`}
+      >
+        OUT
+      </button>
+      <FamilyEditor
+        key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
+        family={family}
+        disabled={disabled}
+        onSave={onEdit}
+        summary={
+          <span className="family-details">
+            <span className={family.visual ? "visual-note" : "visual-note visual-missing"}>
+              {family.visual || "No description yet"}
             </span>
-            <span className="family-pax">
-              {familyBreakdown(family)}
+            <span className="family-id-line">
+              <span className="family-id">
+                {familyLabel(family)} | {familyPax(family)} PAX
+              </span>
+              <span className="family-pax">
+                {familyBreakdown(family)}
+              </span>
+            </span>
+            <span className="family-times">
+              <span>IN {formatClock(family.enteredAt)}</span>
+              <span className="family-due-time">
+                DUE {formatClock(familyDueAt(family))}
+              </span>
             </span>
           </span>
-          <div className="family-times">
-            <span>IN {formatClock(family.enteredAt)}</span>
-            <span className="family-due-time">
-              DUE {formatClock(familyDueAt(family))}
-            </span>
-          </div>
-        </div>
-        <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
-          <strong>{timerLead}</strong>
-          <span>{timerRest.join(" ")}</span>
-        </div>
-      </div>
-
-      <div className="family-actions">
-        <FamilyEditor
-          key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
-          family={family}
-          disabled={disabled}
-          onSave={onEdit}
-        />
-        <button
-          type="button"
-          className="out-button"
-          disabled={disabled}
-          onClick={(event) => onOut(event.currentTarget)}
-          aria-label={`Check ${familyLabel(family)} out`}
-        >
-          OUT
-        </button>
-      </div>
+        }
+      />
     </article>
   );
 }
@@ -916,8 +934,8 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${added ? familyLabel(added) : "Family"} entered / ${customAdults + customChildren} pax / ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
-          : "Entry was not recorded because this phone could not save it. Try again.",
+          ? `${added ? familyLabel(added) : "Family"} entered · ${customAdults + customChildren} pax · ${DEFAULT_TIME_LIMIT_MINUTES}-min timer started`
+          : "Not entered: this phone could not save it. Try again.",
         durationMs: saved ? ACTION_NOTICE_MILLISECONDS : undefined,
       });
       recorded = saved;
@@ -957,8 +975,8 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`
-          : "OUT was not recorded because this phone could not save it. Try again.",
+          ? `${familyLabel(liveFamily)} out · ${familyPax(liveFamily)} pax freed`
+          : "OUT not saved: this phone could not save it. Try again.",
         undo: saved ? { id: liveFamily.id } : undefined,
       });
       if (saved) vibrate();
@@ -989,8 +1007,8 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${familyLabel(family)} updated / ${adults + children} pax / ${timeLimitMinutes} min`
-          : "Changes were not recorded because this phone could not save them.",
+          ? `${familyLabel(family)} updated · ${adults + children} pax · ${timeLimitMinutes}-min limit`
+          : "Changes not saved: this phone could not save them. Try again.",
       });
     } catch (error) {
       reportActionError(error);
@@ -1029,13 +1047,14 @@ export default function PlayPotApp() {
     const current = stateRef.current;
     if (!current) return;
     try {
+      const family = current.families.find((candidate) => candidate.id === undo.id);
       const next = restoreLocalFamily(current, undo.id, Date.now());
       const saved = commitState(next);
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? "Last OUT action undone"
-          : "Undo was not recorded because this phone could not save it.",
+          ? `OUT undone · ${family ? familyLabel(family) : "Family"} is back inside`
+          : "Undo not saved: this phone could not save it. Try again.",
       });
       if (saved) vibrate();
     } catch (error) {
@@ -1052,10 +1071,10 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${familyLabel(family)} restored / original IN ${formatClock(
+          ? `${familyLabel(family)} back inside · IN ${formatClock(
               family.enteredAt,
-            )} / ${currentPax(next)} inside`
-          : "Restore was not recorded because this phone could not save it.",
+            )} · ${currentPax(next)} pax inside`
+          : "Not put back: this phone could not save it. Try again.",
       });
       if (saved) vibrate();
     } catch (error) {
@@ -1072,8 +1091,8 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? `${familyLabel(family)} OUT record permanently deleted from this phone`
-          : "The record could not be deleted from phone storage. Try again.",
+          ? `${familyLabel(family)}'s checked-out record deleted from this phone`
+          : "Record not deleted: this phone could not save the change. Try again.",
       });
       if (saved) vibrate();
     } catch (error) {
@@ -1090,8 +1109,8 @@ export default function PlayPotApp() {
       setNotice({
         tone: saved ? "success" : "error",
         message: saved
-          ? "All Recently OUT records permanently deleted from this phone"
-          : "The records could not be deleted from phone storage. Try again.",
+          ? "All checked-out records deleted from this phone"
+          : "Records not deleted: this phone could not save the change. Try again.",
       });
       if (saved) vibrate();
     } catch (error) {
@@ -1120,7 +1139,7 @@ export default function PlayPotApp() {
       <main className="guest-screen">
         <section className="guest-card" aria-labelledby="guest-title">
           <div className="brand-mark">PP</div>
-          <span className="guest-kicker">STAFF GUEST ACCESS</span>
+          <span className="guest-kicker">STAFF ACCESS</span>
           <h1 id="guest-title">PLAY POT</h1>
           <p>Enter the staff PIN to open Play Pot on this phone.</p>
           <p id="guest-pin-hint" className="guest-pin-hint">
@@ -1128,7 +1147,7 @@ export default function PlayPotApp() {
           </p>
 
           <form className="guest-form" onSubmit={(event) => void handleGuestUnlock(event)}>
-            <label htmlFor="guest-pin">Guest PIN</label>
+            <label htmlFor="guest-pin">Staff PIN</label>
             <input
               ref={guestPinInputRef}
               id="guest-pin"
@@ -1155,11 +1174,11 @@ export default function PlayPotApp() {
               </p>
             ) : null}
             <button type="submit" disabled={guestPin.length !== 6 || pending === "unlock"}>
-              {pending === "unlock" ? "ENTERING..." : "ENTER"}
+              {pending === "unlock" ? "OPENING..." : "OPEN"}
             </button>
           </form>
           <small>
-            Each phone controls its own tracker. Read-only live view active. No
+            This phone keeps its own count; the owner sees a view-only copy. No
             names or contact details.
           </small>
         </section>
@@ -1172,7 +1191,10 @@ export default function PlayPotApp() {
       <main className="loading-screen">
         <div className="brand-mark">PP</div>
         <h1>CHECK THIS PHONE</h1>
-        <p>The saved record cannot be read safely.</p>
+        <p>
+          The saved record cannot be read safely. Tell your supervisor before
+          starting fresh.
+        </p>
         <button
           type="button"
           onClick={(event) => {
@@ -1283,6 +1305,12 @@ export default function PlayPotApp() {
     ? timerState(nextDueFamily, now)
     : null;
   const busy = Boolean(pending);
+  const familyCount =
+    activeFamilies.length === 0
+      ? "EMPTY"
+      : `${activeFamilies.length} ${
+          activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
+        }`;
   // Newest at the top, family due next at the bottom, right above ENTER.
   const familiesByDue = [...activeFamilies].sort(
     (left, right) =>
@@ -1301,25 +1329,31 @@ export default function PlayPotApp() {
             }`}
           >
             <strong>{paxInside}</strong>
-            <span>/ {CAPACITY} PAX</span>
+            <span className="capacity-detail">
+              <span>/ {CAPACITY} PAX</span>
+              <span>{familyCount}</span>
+            </span>
           </div>
+          {/* Under 15: pax left. From 15: how many more before the hard stop at 20. */}
           <div className="spaces-card">
             <strong>
-              {paxInside <= CAPACITY
+              {paxInside < CAPACITY
                 ? slotsLeftToFifteen
                 : Math.max(0, FLEX_CAPACITY - paxInside)}
             </strong>
             <span>
-              {paxInside <= CAPACITY
-                ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT`
-                : "MAX PAX LEFT"}
+              {paxInside < CAPACITY
+                ? "PAX LEFT"
+                : paxInside < FLEX_CAPACITY
+                  ? `LEFT TO ${FLEX_CAPACITY}`
+                  : `FULL AT ${FLEX_CAPACITY}`}
             </span>
           </div>
         </div>
 
         {unsaved ? (
           <div className="storage-alert" role="alert">
-            PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
+            NOT SAVED ON THIS PHONE · LAST ACTION DID NOT COUNT
           </div>
         ) : null}
       </header>
@@ -1329,15 +1363,15 @@ export default function PlayPotApp() {
           {recentlyOut.length ? (
             <section
               className="recent-out-section"
-              aria-label="Recently OUT families"
+              aria-label="Checked-out families"
             >
               <details>
                 <summary>
                   <span>
-                    <strong>Recently OUT</strong>
+                    <strong>Checked out</strong>
                     <em>{recentlyOut.length}</em>
                   </span>
-                  <small>Recovery available for 15 min</small>
+                  <small>Last 15 min · put a family back if OUT was a mistake</small>
                 </summary>
                 <div className="recent-out-list">
                   {recentlyOut.map((family) => (
@@ -1346,11 +1380,10 @@ export default function PlayPotApp() {
                         <div>
                           <strong>{familyLabel(family)}</strong>
                           <span>
-                            {family.adults}A {family.children}C /{" "}
-                            {familyPax(family)} PAX
+                            {familyBreakdown(family)} · {familyPax(family)} PAX
                           </span>
                         </div>
-                        <p>{family.visual || "No visual recorded"}</p>
+                        <p>{family.visual || "No description"}</p>
                       </div>
                       <div className="recent-out-times">
                         <span>IN {formatClock(family.enteredAt)}</span>
@@ -1360,7 +1393,7 @@ export default function PlayPotApp() {
                         <button
                           type="button"
                           className="restore-button"
-                          aria-label={`Restore ${familyLabel(family)}`}
+                          aria-label={`Put ${familyLabel(family)} back inside`}
                           disabled={busy}
                           onClick={(event) => {
                             confirmationReturnFocusRef.current =
@@ -1369,12 +1402,12 @@ export default function PlayPotApp() {
                             setRestoreCandidate(family);
                           }}
                         >
-                          RESTORE
+                          PUT BACK INSIDE
                         </button>
                         <button
                           type="button"
                           className="delete-recent-button"
-                          aria-label={`Delete ${familyLabel(family)} OUT record`}
+                          aria-label={`Delete ${familyLabel(family)}'s checked-out record`}
                           disabled={busy}
                           onClick={(event) => {
                             confirmationReturnFocusRef.current =
@@ -1383,7 +1416,7 @@ export default function PlayPotApp() {
                             setDeleteCandidate(family);
                           }}
                         >
-                          DELETE
+                          DELETE RECORD
                         </button>
                       </div>
                     </article>
@@ -1399,7 +1432,7 @@ export default function PlayPotApp() {
                     setConfirmDeleteAll(true);
                   }}
                 >
-                  DELETE ALL ENTRIES
+                  DELETE ALL RECORDS
                 </button>
               </details>
             </section>
@@ -1407,13 +1440,7 @@ export default function PlayPotApp() {
 
           <div className="section-heading">
             <h2 id="inside-title">Inside now</h2>
-            <span className="section-count">
-              {activeFamilies.length === 0
-                ? "EMPTY"
-                : `${activeFamilies.length} ${
-                    activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
-                  }`}
-            </span>
+            <span className="section-count">{familyCount}</span>
           </div>
 
           <div className="family-list">
@@ -1508,7 +1535,7 @@ export default function PlayPotApp() {
         {/* The clothing field and ENTER share one row to keep the dock short. */}
         <div className="dock-entry-row">
           <label className="sr-only" htmlFor="visual-input">
-            Visual identifier, clothing or items only (optional)
+            Wearing or carrying (optional; clothing or items only)
           </label>
           <input
             id="visual-input"
@@ -1542,8 +1569,10 @@ export default function PlayPotApp() {
               : fits || canFlex
                 ? `ENTER: ${selectedPax} PAX`
                 : paxInside >= FLEX_CAPACITY
-                  ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
-                  : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
+                  ? `FULL AT ${FLEX_CAPACITY} · NO ENTRY`
+                  : `ONLY ${Math.max(0, FLEX_CAPACITY - paxInside)} MORE ${
+                      FLEX_CAPACITY - paxInside === 1 ? "FITS" : "FIT"
+                    }`}
           </button>
           </div>
       </section>
@@ -1560,8 +1589,8 @@ export default function PlayPotApp() {
           >
             <h2 id="confirm-out-title">{familyLabel(outCandidate)} OUT?</h2>
             <p id="confirm-out-copy">
-              {outCandidate.visual || `${outCandidate.adults}A ${outCandidate.children}C`} /
-              remove {familyPax(outCandidate)} pax from Inside now.
+              {outCandidate.visual || familyBreakdown(outCandidate)} ·{" "}
+              {familyPax(outCandidate)} pax leave.
             </p>
             <div className="confirm-actions">
               <button
@@ -1602,7 +1631,8 @@ export default function PlayPotApp() {
           >
             <h2 id="confirm-flex-title">ENTER ABOVE {CAPACITY}?</h2>
             <p id="confirm-flex-copy">
-              This will bring the total to {projectedPax}. Maximum {FLEX_CAPACITY}.
+              This makes {projectedPax} pax inside, over the normal {CAPACITY}.
+              The hard limit is {FLEX_CAPACITY}.
             </p>
             <div className="confirm-actions">
               <button
@@ -1645,14 +1675,16 @@ export default function PlayPotApp() {
             aria-describedby="confirm-restore-copy"
           >
             <h2 id="confirm-restore-title">
-              RESTORE {familyLabel(restoreCandidate)}?
+              PUT {familyLabel(restoreCandidate)} BACK INSIDE?
             </h2>
             <p id="confirm-restore-copy">
-              Return {familyPax(restoreCandidate)} pax to Inside now with the original IN time of {formatClock(restoreCandidate.enteredAt)}. The live count becomes {restoreProjectedPax}.
+              {familyPax(restoreCandidate)} pax go back inside with their original
+              IN time of {formatClock(restoreCandidate.enteredAt)}. Total inside
+              becomes {restoreProjectedPax}.
               {restoreProjectedPax > FLEX_CAPACITY
-                ? ` This reveals a total above ${FLEX_CAPACITY}. Stop new entry and correct the live count.`
+                ? ` That is over the hard limit of ${FLEX_CAPACITY}: stop new entry and correct the count.`
                 : restoreProjectedPax > CAPACITY
-                  ? ` This puts the total above ${CAPACITY}.`
+                  ? ` That is over the normal ${CAPACITY}.`
                   : ""}
             </p>
             <div className="confirm-actions">
@@ -1675,7 +1707,7 @@ export default function PlayPotApp() {
                   handleRestoreRecent(family);
                 }}
               >
-                YES, RESTORE
+                YES, PUT BACK
               </button>
             </div>
           </section>
@@ -1696,9 +1728,8 @@ export default function PlayPotApp() {
               DELETE {familyLabel(deleteCandidate)} RECORD?
             </h2>
             <p id="confirm-delete-copy">
-              This permanently removes {familyLabel(deleteCandidate)}&apos;s OUT
-              record from this phone. It will not change Inside now and cannot
-              be undone.
+              This removes {familyLabel(deleteCandidate)}&apos;s checked-out
+              record from this phone for good. Nobody inside changes.
             </p>
             <div className="confirm-actions">
               <button
@@ -1737,11 +1768,11 @@ export default function PlayPotApp() {
             aria-labelledby="confirm-delete-all-title"
             aria-describedby="confirm-delete-all-copy"
           >
-            <h2 id="confirm-delete-all-title">DELETE ALL RECENTLY OUT?</h2>
+            <h2 id="confirm-delete-all-title">DELETE ALL CHECKED-OUT RECORDS?</h2>
             <p id="confirm-delete-all-copy">
-              This permanently deletes all {recentlyOut.length} Recently OUT
+              This removes all {recentlyOut.length} checked-out
               {recentlyOut.length === 1 ? " record" : " records"} from this
-              phone. This cannot be undone.
+              phone for good. Nobody inside changes.
             </p>
             <div className="confirm-actions">
               <button
@@ -1781,13 +1812,13 @@ export default function PlayPotApp() {
           >
             <h2 id="confirm-edit-title">SAVE COUNT CORRECTION?</h2>
             <p id="confirm-edit-copy">
-              {familyLabel(editCandidate.family)} changes from {familyPax(
+              {familyLabel(editCandidate.family)} goes from {familyPax(
                 editCandidate.family,
-              )} to {editCandidate.adults + editCandidate.children} pax. The
-              live total changes from {paxInside} to {editProjectedPax}.
+              )} to {editCandidate.adults + editCandidate.children} pax. Total
+              inside goes from {paxInside} to {editProjectedPax}.
               {editProjectedPax > FLEX_CAPACITY
-                ? ` This records the true count, but new entry stays blocked above ${FLEX_CAPACITY}.`
-                : ` This puts the total above ${CAPACITY}.`}
+                ? ` That is over the hard limit of ${FLEX_CAPACITY}, so new entry stays blocked until the count drops.`
+                : ` That is over the normal ${CAPACITY}.`}
             </p>
             <div className="confirm-actions">
               <button

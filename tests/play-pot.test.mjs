@@ -86,21 +86,23 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(client, /THIS PHONE \/ LIVE(?: VIEW)?/);
   assert.match(client, /createLiveSyncPayload/);
   assert.match(client, /fetch\("\/api\/live"/);
-  assert.match(client, /Read-only live view active/);
+  assert.match(client, /the owner sees a view-only copy/);
   assert.match(client, /No\s*names or contact details/);
   assert.doesNotMatch(client, /visible to the tool owner/);
   assert.match(client, /PIN\s*<strong>000000<\/strong>/);
-  assert.match(client, /pending === "unlock" \? "ENTERING\.\.\." : "ENTER"/);
+  assert.match(client, /pending === "unlock" \? "OPENING\.\.\." : "OPEN"/);
   assert.doesNotMatch(
     client,
     /OPEN PLAY POT|INSTALL ON THIS PHONE|install-app-button|handleInstall|beforeinstallprompt/,
   );
-  assert.match(client, /CANNOT ENTER \/ MAX/);
+  assert.match(client, /FULL AT \$\{FLEX_CAPACITY\} · NO ENTRY/);
+  assert.match(client, /ONLY \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} MORE/);
   assert.match(client, /className="out-button"/);
   assert.match(
     client,
-    /<summary aria-label=\{`Edit \$\{familyLabel\(family\)\}`\}>Edit<\/summary>/,
+    /<summary aria-label=\{`Edit \$\{familyLabel\(family\)\}`\}>/,
   );
+  assert.match(client, /open \? \(\s*"Close"/);
   assert.match(client, /return `#\$\{family\.familyNumber\}`/);
   assert.match(
     client,
@@ -108,7 +110,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   );
   assert.match(client, /family\.adults === 1 \? "ADULT" : "ADULTS"/);
   assert.match(client, /family\.children === 1 \? "CHILD" : "CHILDREN"/);
-  assert.match(client, /timeLimitMinutes} MIN REACHED/);
+  assert.match(client, /label: "DUE NOW"/);
   assert.doesNotMatch(client, /FLEX MODE|FLEX ENTRY|OVER TARGET|TO HARD MAX/);
   assert.doesNotMatch(client, /FLEX \$\{totalInside\}/);
   assert.doesNotMatch(
@@ -124,17 +126,15 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   );
   assert.match(css, /\.capacity-number\.capacity-safe strong/);
   assert.match(css, /\.capacity-number\.capacity-full strong/);
-  assert.match(
-    client,
-    /slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"/,
-  );
-  assert.match(client, /\? `\$\{slotsLeftToFifteen === 1 \? "SLOT" : "SLOTS"\} LEFT`/);
+  assert.match(client, /\? "PAX LEFT"/);
+  assert.match(client, /`LEFT TO \$\{FLEX_CAPACITY\}`/);
+  assert.match(client, /`FULL AT \$\{FLEX_CAPACITY\}`/);
   assert.doesNotMatch(client, /LEFT TO \$\{CAPACITY\} PAX/);
-  assert.match(client, /MAX PAX/);
-  assert.match(client, /Recently OUT/);
-  assert.match(client, /RESTORE/);
+  assert.match(client, /Checked out/);
+  assert.match(client, /PUT BACK INSIDE/);
+  assert.match(client, /YES, PUT BACK/);
   assert.match(client, /YES, DELETE/);
-  assert.match(client, /DELETE ALL ENTRIES/);
+  assert.match(client, /DELETE ALL RECORDS/);
   assert.match(client, /YES, DELETE ALL/);
   assert.match(client, /deleteRecentLocalFamily/);
   assert.match(client, /deleteAllRecentLocalFamilies/);
@@ -149,7 +149,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   // The OUT notice keeps the default 10-second UNDO window.
   assert.match(
     client,
-    /spaces freed`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
+    /pax freed`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
   );
   assert.match(client, /RECORDED ✓/);
   assert.match(client, /NEXT DUE/);
@@ -185,7 +185,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(client, /Decrease time limit by 1 minute/);
   assert.match(client, /Extend time limit by 1 minute/);
   assert.match(client, /SAVE COUNT CORRECTION/);
-  assert.match(client, /Recovery available for 15 min/);
+  assert.match(client, /Last 15 min · put a family back if OUT was a mistake/);
   assert.doesNotMatch(client, /deletes in \d|delete(?:s|d)? in \{?/i);
   assert.match(
     client,
