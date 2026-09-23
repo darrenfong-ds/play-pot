@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { confirmationArmed } from "./confirmation-guard";
 import {
   addLocalFamily,
   CAPACITY,
@@ -361,6 +362,7 @@ export default function PlayPotApp() {
   const confirmationDialogRef = useRef<HTMLElement | null>(null);
   const confirmationReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const confirmationHandledRef = useRef(false);
+  const confirmationOpenedAtRef = useRef(0);
   const liveDeviceIdRef = useRef("");
   const liveSyncInFlightRef = useRef(false);
   const liveSyncPendingRef = useRef<PlayPotState | null>(null);
@@ -653,6 +655,18 @@ export default function PlayPotApp() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
+  // A layout effect stamps the open time before any later tap is handled.
+  useLayoutEffect(() => {
+    confirmationOpenedAtRef.current = performance.now();
+  }, [
+    outCandidate,
+    confirmFlex,
+    restoreCandidate,
+    deleteCandidate,
+    confirmDeleteAll,
+    editCandidate,
+  ]);
+
   useEffect(() => {
     if (
       !outCandidate &&
@@ -723,6 +737,22 @@ export default function PlayPotApp() {
     const returnTarget = confirmationReturnFocusRef.current;
     confirmationReturnFocusRef.current = null;
     window.setTimeout(() => returnTarget?.focus(), 0);
+  }
+
+  function confirmationIsArmed() {
+    return confirmationArmed(confirmationOpenedAtRef.current, performance.now());
+  }
+
+  function handleConfirmationNo() {
+    if (!confirmationIsArmed()) return;
+    cancelOpenConfirmation();
+  }
+
+  // Lets exactly one YES through, and only once the dialog is armed.
+  function claimConfirmation() {
+    if (confirmationHandledRef.current || !confirmationIsArmed()) return false;
+    confirmationHandledRef.current = true;
+    return true;
   }
 
   function vibrate() {
@@ -1362,7 +1392,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1370,8 +1400,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   const family = outCandidate;
                   setOutCandidate(null);
                   confirmationReturnFocusRef.current = null;
@@ -1404,7 +1433,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1412,8 +1441,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   setConfirmFlex(false);
                   confirmationReturnFocusRef.current = null;
                   handleAdd(true);
@@ -1454,7 +1482,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1462,8 +1490,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   const family = restoreCandidate;
                   setRestoreCandidate(null);
                   confirmationReturnFocusRef.current = null;
@@ -1500,7 +1527,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1508,8 +1535,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   const family = deleteCandidate;
                   setDeleteCandidate(null);
                   confirmationReturnFocusRef.current = null;
@@ -1544,7 +1570,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1552,8 +1578,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   setConfirmDeleteAll(false);
                   confirmationReturnFocusRef.current = null;
                   handleDeleteAllRecent();
@@ -1591,7 +1616,7 @@ export default function PlayPotApp() {
                 ref={cancelConfirmationRef}
                 type="button"
                 className="confirm-no"
-                onClick={cancelOpenConfirmation}
+                onClick={handleConfirmationNo}
               >
                 NO
               </button>
@@ -1599,8 +1624,7 @@ export default function PlayPotApp() {
                 type="button"
                 className="confirm-yes"
                 onClick={() => {
-                  if (confirmationHandledRef.current) return;
-                  confirmationHandledRef.current = true;
+                  if (!claimConfirmation()) return;
                   const candidate = editCandidate;
                   setEditCandidate(null);
                   confirmationReturnFocusRef.current = null;

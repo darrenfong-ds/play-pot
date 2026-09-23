@@ -62,6 +62,32 @@ test("keeps earlier-day families out of NEXT DUE and shows long overdue times in
   assert.match(client, /className="stale-entry-flag"/);
 });
 
+test("ignores taps on every confirmation for 400 ms after it opens", async () => {
+  const guard = await import(new URL("../app/confirmation-guard.ts", import.meta.url));
+  assert.equal(guard.CONFIRMATION_ARM_MILLISECONDS, 400);
+  assert.equal(guard.confirmationArmed(1_000, 1_000), false);
+  assert.equal(guard.confirmationArmed(1_000, 1_399), false);
+  assert.equal(guard.confirmationArmed(1_000, 1_400), true);
+
+  const client = await readSource("app/play-pot-app.tsx");
+  const count = (pattern) => client.match(pattern)?.length ?? 0;
+  const yesButtons = count(/className="confirm-yes"/g);
+  const noButtons = count(/className="confirm-no"/g);
+  assert.ok(yesButtons >= 6);
+  assert.equal(count(/if \(!claimConfirmation\(\)\) return;/g), yesButtons);
+  assert.equal(noButtons, yesButtons);
+  assert.equal(count(/onClick=\{handleConfirmationNo\}/g), noButtons);
+  assert.equal(count(/onClick=\{cancelOpenConfirmation\}/g), 0);
+  assert.match(
+    client,
+    /useLayoutEffect\(\(\) => \{\s*confirmationOpenedAtRef\.current = performance\.now\(\);/,
+  );
+  assert.match(
+    client,
+    /function claimConfirmation\(\) \{\s*if \(confirmationHandledRef\.current \|\| !confirmationIsArmed\(\)\) return false;/,
+  );
+});
+
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
   const [client, css] = await Promise.all([
     readSource("app/play-pot-app.tsx"),
