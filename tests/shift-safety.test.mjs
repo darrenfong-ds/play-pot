@@ -111,6 +111,31 @@ test("asks NO / YES before starting fresh on this phone", async () => {
   assert.match(client, /!editCandidate &&\s*!confirmStartFresh/);
 });
 
+test("shows the blocked entry button at full opacity with readable contrast", async () => {
+  const [client, css] = await Promise.all([
+    readSource("app/play-pot-app.tsx"),
+    readSource("app/globals.css"),
+  ]);
+  assert.match(cssRule(css, ".commit-family-button:disabled"), /opacity: 1;/);
+  assert.doesNotMatch(css, /opacity: 0\.72/);
+  assert.match(client, /!fits \? "commit-overflow" : ""/);
+  assert.match(client, /CANNOT ENTER \/ MAX/);
+
+  const luminance = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((index) => {
+      const channel = parseInt(hex.slice(index, index + 2), 16) / 255;
+      return channel <= 0.03928
+        ? channel / 12.92
+        : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const coralFill = css.match(/--coral-fill: (#[0-9a-f]{6});/i)[1];
+  assert.match(cssRule(css, ".commit-overflow"), /background: var\(--coral-fill\);/);
+  const contrast = 1.05 / (luminance(coralFill) + 0.05);
+  assert.ok(contrast >= 4.5, `white on ${coralFill} is ${contrast.toFixed(2)}:1`);
+});
+
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
   const [client, css] = await Promise.all([
     readSource("app/play-pot-app.tsx"),

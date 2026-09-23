@@ -94,8 +94,9 @@ button:disabled {
   opacity: 0.45;
 }
 
+/* Its disabled states carry messages staff must read, such as CANNOT ENTER. */
 .commit-family-button:disabled {
-  opacity: 0.72;
+  opacity: 1;
 }
 
 input::placeholder {
@@ -348,10 +349,6 @@ input::placeholder {
 .commit-recorded {
   background: #176b58;
   box-shadow: inset 0 0 0 2px var(--aqua);
-}
-
-.commit-recorded:disabled {
-  opacity: 1;
 }
 
 .operating-section {
