@@ -144,7 +144,12 @@ test("keeps phone control local and exposes only a read-only live mirror", async
     client.match(
       /durationMs: saved \? ACTION_NOTICE_MILLISECONDS : undefined/g,
     )?.length,
-    2,
+    1,
+  );
+  // The OUT notice keeps the default 10-second UNDO window.
+  assert.match(
+    client,
+    /spaces freed`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
   );
   assert.match(client, /RECORDED ✓/);
   assert.match(client, /NEXT DUE/);

@@ -825,7 +825,6 @@ export default function PlayPotApp() {
           ? `${familyLabel(liveFamily)} OUT / ${familyPax(liveFamily)} spaces freed`
           : "OUT was not recorded because this phone could not save it. Try again.",
         undo: saved ? { id: liveFamily.id } : undefined,
-        durationMs: saved ? ACTION_NOTICE_MILLISECONDS : undefined,
       });
       if (saved) vibrate();
     } catch (error) {
