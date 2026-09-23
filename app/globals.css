@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Nunito (SIL Open Font License, public/fonts/Nunito-OFL.txt), weights 400-800. */
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/Nunito-latin.woff2") format("woff2");
+}
+
 :root {
   --page: #f3efe6;
   --surface: #fffdf8;
@@ -46,15 +55,16 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  /* Phones have system-ui (SF Pro, Roboto) with real heavy weights; Aptos and Segoe UI are desktop-only. */
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  /* A rounded face keeps the tracker friendly; ui-rounded covers the moment before Nunito loads. */
+  font-family: "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: 16px;
+  font-weight: 500;
 }
 
 /* Tailwind's preflight resets headings to weight 400. */
 h1,
 h2 {
-  font-weight: 800;
+  font-weight: 750;
 }
 
 .sr-only {
@@ -170,7 +180,7 @@ input::placeholder {
 
 .capacity-number strong {
   font-size: 2.5rem;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.05em;
 }
@@ -192,14 +202,14 @@ input::placeholder {
 .capacity-detail span:first-child {
   color: #cee0df;
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .capacity-detail span:last-child {
-  color: #a9c4c3;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  color: #b9d0cf;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .spaces-card {
@@ -212,7 +222,7 @@ input::placeholder {
 
 .spaces-card strong {
   font-size: 1.35rem;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1;
 }
 
@@ -220,10 +230,10 @@ input::placeholder {
   max-width: 100%;
   margin-top: 0.15rem;
   color: #d9e8e7;
-  font-size: 0.75rem;
-  font-weight: 800;
+  font-size: 0.82rem;
+  font-weight: 700;
   line-height: 1.2;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   text-align: center;
 }
 
@@ -233,8 +243,8 @@ input::placeholder {
   color: #fff;
   text-align: center;
   font-size: 0.78rem;
-  font-weight: 950;
-  letter-spacing: 0.07em;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .storage-alert {
@@ -278,8 +288,8 @@ input::placeholder {
 .section-count {
   color: var(--muted);
   font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .front-counts {
@@ -306,7 +316,7 @@ input::placeholder {
   box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink);
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .count-stepper-value {
@@ -318,15 +328,15 @@ input::placeholder {
 
 .count-stepper-value strong {
   font-size: 1.2rem;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .count-stepper-value small {
   margin-top: 0.1rem;
   color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .stepper {
@@ -338,7 +348,7 @@ input::placeholder {
 }
 
 .stepper-label {
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .stepper button {
@@ -349,7 +359,7 @@ input::placeholder {
   background: var(--surface);
   color: var(--ink);
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .stepper strong {
@@ -362,7 +372,7 @@ input::placeholder {
   justify-content: space-between;
   margin-bottom: 0.38rem;
   font-size: 0.78rem;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .field-label span {
@@ -394,9 +404,9 @@ input::placeholder {
   background: var(--teal-fill);
   color: #fff;
   font-size: 1rem;
-  font-weight: 900;
+  font-weight: 750;
   line-height: 1.1;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em;
 }
 
 .commit-overflow {
@@ -481,9 +491,9 @@ input::placeholder {
 
 .next-due > span:first-child {
   color: var(--teal);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .next-due strong {
@@ -491,14 +501,14 @@ input::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .next-due > em {
   text-align: right;
   font-size: 0.82rem;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 750;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -515,7 +525,7 @@ input::placeholder {
 
 .family-list {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.65rem;
 }
 
 /*
@@ -527,22 +537,22 @@ input::placeholder {
   display: grid;
   grid-template-columns: 4.1rem minmax(0, 1fr) 4.6rem;
   grid-auto-flow: row dense;
-  gap: 0.5rem;
-  padding: 0.45rem;
+  gap: 0.55rem;
+  padding: 0.55rem;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 18px;
   background: var(--surface);
+  box-shadow: 0 1px 3px rgba(7, 30, 36, 0.06);
 }
 
 /* Overdue: tinted card, dark amber edge and solid amber timer. */
 .family-card-due {
   border: 2px solid var(--amber-strong);
   background: var(--amber-soft);
-  box-shadow: inset 6px 0 0 var(--amber-strong);
 }
 
 .family-card-next {
-  outline: 3px solid var(--aqua);
+  outline: 2px solid var(--aqua);
   outline-offset: 2px;
 }
 
@@ -587,14 +597,14 @@ input::placeholder {
 .family-id {
   margin-right: 0.4rem;
   font-size: 0.85rem;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .family-pax {
   display: inline-block;
   color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: 0.8rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -605,7 +615,7 @@ input::placeholder {
   justify-content: center;
   align-items: center;
   padding: 0.3rem 0.2rem;
-  border-radius: 11px;
+  border-radius: 14px;
   background: var(--surface-soft);
   color: var(--ink);
   text-align: center;
@@ -613,16 +623,22 @@ input::placeholder {
 
 .timer-pill strong {
   font-size: 1.55rem;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1;
 }
 
 .timer-pill span {
   margin-top: 0.15rem;
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+/* Shared timer wording is uppercase ("+7 MIN OVER"); show it in the calmer lowercase. */
+.timer-pill span,
+.next-due > em {
+  text-transform: lowercase;
 }
 
 .timer-due {
@@ -643,10 +659,9 @@ input::placeholder {
   background: var(--red-soft);
   color: var(--coral-dark);
   font-size: 0.8rem;
-  font-weight: 900;
+  font-weight: 750;
   letter-spacing: 0.025em;
   line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .family-times {
@@ -657,9 +672,8 @@ input::placeholder {
   gap: 0.75rem;
   color: var(--ink);
   font-size: 0.9rem;
-  font-weight: 900;
+  font-weight: 750;
   line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .family-times span {
@@ -686,7 +700,7 @@ input::placeholder {
   overflow-wrap: anywhere;
   color: var(--ink);
   font-size: 1.02rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -734,7 +748,7 @@ input::placeholder {
   padding: 0 0.5rem;
   color: var(--ink);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .family-editor[open] summary {
@@ -766,7 +780,7 @@ input::placeholder {
 
 .time-limit-editor > span {
   font-size: 0.76rem;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .time-limit-editor button {
@@ -777,7 +791,7 @@ input::placeholder {
   background: var(--surface-soft);
   color: var(--ink);
   font-size: 1.2rem;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .time-limit-editor strong {
@@ -797,7 +811,7 @@ input::placeholder {
   min-height: 50px;
   border-radius: 12px;
   font-size: 0.78rem;
-  font-weight: 950;
+  font-weight: 800;
   letter-spacing: 0.025em;
 }
 
@@ -816,13 +830,13 @@ input::placeholder {
 .out-button {
   min-height: 44px;
   padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: var(--coral-fill);
-  color: #fff;
+  border: 1.5px solid #eba39e;
+  border-radius: 14px;
+  background: var(--red-soft);
+  color: var(--coral-dark);
   font-size: 1.05rem;
-  font-weight: 900;
-  letter-spacing: 0.05em;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .empty-state {
@@ -839,8 +853,8 @@ input::placeholder {
 
 .empty-state strong {
   color: var(--teal);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
 }
 
 .recent-out-section details {
@@ -875,7 +889,7 @@ input::placeholder {
   content: "+";
   color: var(--teal);
   font-size: 1.3rem;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .recent-out-section details[open] summary::after {
@@ -902,7 +916,7 @@ input::placeholder {
   text-align: center;
   font-size: 0.68rem;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .recent-out-section summary small {
@@ -946,14 +960,14 @@ input::placeholder {
 
 .recent-out-main > div > strong {
   font-size: 1rem;
-  font-weight: 950;
+  font-weight: 800;
 }
 
 .recent-out-main span,
 .recent-out-times {
   color: var(--muted);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .recent-out-main p {
@@ -986,8 +1000,12 @@ input::placeholder {
   min-height: 48px;
   border-radius: 11px;
   font-size: 0.85rem;
-  font-weight: 900;
-  letter-spacing: 0.035em;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.out-button:active {
+  background: #ffcfca;
 }
 
 /* Restoring is the reason this panel exists, so it is the stronger button. */
@@ -1012,8 +1030,8 @@ input::placeholder {
   background: transparent;
   color: var(--coral-dark);
   font-size: 0.85rem;
-  font-weight: 900;
-  letter-spacing: 0.035em;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .guest-screen {
@@ -1042,15 +1060,15 @@ input::placeholder {
 
 .guest-kicker {
   color: var(--teal);
-  font-size: 0.67rem;
-  font-weight: 950;
-  letter-spacing: 0.12em;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .guest-card h1 {
   margin: 0.32rem 0 0.4rem;
   font-size: 1.6rem;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
 }
 
 .guest-card > p {
@@ -1068,14 +1086,14 @@ input::placeholder {
   background: var(--green-soft);
   color: var(--teal-fill);
   font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .guest-pin-hint strong {
   margin-left: 0.28rem;
   font-size: 0.92rem;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.01em;
 }
 
 .guest-form {
@@ -1087,7 +1105,7 @@ input::placeholder {
 
 .guest-form label {
   font-size: 0.77rem;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .guest-pin-input {
@@ -1100,7 +1118,7 @@ input::placeholder {
   color: var(--ink);
   text-align: center;
   font-size: 1.55rem;
-  font-weight: 950;
+  font-weight: 800;
   letter-spacing: 0.55em;
   text-indent: 0.55em;
 }
@@ -1110,8 +1128,8 @@ input::placeholder {
   min-height: 56px;
   border-radius: 14px;
   font-size: 0.82rem;
-  font-weight: 950;
-  letter-spacing: 0.045em;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .guest-form > button {
@@ -1124,7 +1142,7 @@ input::placeholder {
 .guest-error {
   margin: 0;
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .guest-error {
@@ -1160,7 +1178,7 @@ input::placeholder {
   color: #fff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   font-size: 0.85rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -1175,7 +1193,7 @@ input::placeholder {
   border-radius: 10px;
   background: transparent;
   color: #fff;
-  font-weight: 950;
+  font-weight: 800;
 }
 
 .confirm-overlay {
@@ -1243,8 +1261,8 @@ input::placeholder {
   min-height: 56px;
   border-radius: 13px;
   font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: 0.035em;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .confirm-no {
@@ -1279,13 +1297,13 @@ input::placeholder {
   background: var(--header);
   color: var(--aqua);
   font-size: 1.2rem;
-  font-weight: 950;
+  font-weight: 800;
 }
 
 .loading-screen h1 {
   margin: 0.25rem 0 0;
   font-size: 1.35rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
 }
 
 .loading-screen p {
@@ -1302,7 +1320,7 @@ input::placeholder {
   border-radius: 12px;
   background: var(--teal-fill);
   color: #fff;
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .loading-screen .loading-slow {

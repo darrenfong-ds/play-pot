@@ -103,7 +103,7 @@ test("asks NO / YES before starting fresh on this phone", async () => {
   );
   assert.match(
     recovery,
-    /confirm-start-fresh-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, START FRESH\s*</,
+    /confirm-start-fresh-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*No\s*<\/[\s\S]*?>\s*Yes, start fresh\s*</,
   );
   // Escape, NO, and the dialog lifecycle all know about this confirmation.
   assert.equal(client.match(/setConfirmStartFresh\(false\);/g)?.length, 3);
@@ -119,7 +119,7 @@ test("shows the blocked entry button at full opacity with readable contrast", as
   assert.match(cssRule(css, ".commit-family-button:disabled"), /opacity: 1;/);
   assert.doesNotMatch(css, /opacity: 0\.72/);
   assert.match(client, /!fits \? "commit-overflow" : ""/);
-  assert.match(client, /ONLY \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} MORE/);
+  assert.match(client, /Only \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} more/);
 
   const luminance = (hex) => {
     const [r, g, b] = [1, 3, 5].map((index) => {

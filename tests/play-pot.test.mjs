@@ -33,7 +33,7 @@ test("server-renders the finished Play Pot shell", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Play Pot \| Live Capacity &amp; Family Timer<\/title>/i);
-  assert.match(html, /PLAY POT/);
+  assert.match(html, /<h1>Play Pot<\/h1>/);
   assert.match(html, /Opening this phone/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
@@ -90,13 +90,13 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(client, /No\s*names or contact details/);
   assert.doesNotMatch(client, /visible to the tool owner/);
   assert.match(client, /PIN\s*<strong>000000<\/strong>/);
-  assert.match(client, /pending === "unlock" \? "OPENING\.\.\." : "OPEN"/);
+  assert.match(client, /pending === "unlock" \? "Opening…" : "Open"/);
   assert.doesNotMatch(
     client,
     /OPEN PLAY POT|INSTALL ON THIS PHONE|install-app-button|handleInstall|beforeinstallprompt/,
   );
-  assert.match(client, /FULL AT \$\{FLEX_CAPACITY\} · NO ENTRY/);
-  assert.match(client, /ONLY \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} MORE/);
+  assert.match(client, /Full at \$\{FLEX_CAPACITY\} · no entry/);
+  assert.match(client, /Only \$\{Math\.max\(0, FLEX_CAPACITY - paxInside\)\} more/);
   assert.match(client, /className="out-button"/);
   assert.match(
     client,
@@ -106,11 +106,11 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(client, /return `#\$\{family\.familyNumber\}`/);
   assert.match(
     client,
-    /\{familyLabel\(family\)\} \| \{familyPax\(family\)\} PAX/,
+    /\{familyLabel\(family\)\} · \{familyPax\(family\)\} pax/,
   );
-  assert.match(client, /family\.adults === 1 \? "ADULT" : "ADULTS"/);
-  assert.match(client, /family\.children === 1 \? "CHILD" : "CHILDREN"/);
-  assert.match(client, /label: "DUE NOW"/);
+  assert.match(client, /family\.adults === 1 \? "adult" : "adults"/);
+  assert.match(client, /family\.children === 1 \? "child" : "children"/);
+  assert.match(client, /label: "Due now"/);
   assert.doesNotMatch(client, /FLEX MODE|FLEX ENTRY|OVER TARGET|TO HARD MAX/);
   assert.doesNotMatch(client, /FLEX \$\{totalInside\}/);
   assert.doesNotMatch(
@@ -119,23 +119,23 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   );
   assert.match(client, /!fits \? "commit-overflow" : ""/);
   assert.doesNotMatch(client, /\bTARGET\b/);
-  assert.match(client, /\/ \{CAPACITY\} PAX/);
+  assert.match(client, /\/ \{CAPACITY\} pax/);
   assert.match(
     client,
     /paxInside >= CAPACITY \? "capacity-full" : "capacity-safe"/,
   );
   assert.match(css, /\.capacity-number\.capacity-safe strong/);
   assert.match(css, /\.capacity-number\.capacity-full strong/);
-  assert.match(client, /\? "PAX LEFT"/);
-  assert.match(client, /`LEFT TO \$\{FLEX_CAPACITY\}`/);
-  assert.match(client, /`FULL AT \$\{FLEX_CAPACITY\}`/);
+  assert.match(client, /\? "pax left"/);
+  assert.match(client, /`left to \$\{FLEX_CAPACITY\}`/);
+  assert.match(client, /`full at \$\{FLEX_CAPACITY\}`/);
   assert.doesNotMatch(client, /LEFT TO \$\{CAPACITY\} PAX/);
   assert.match(client, /Checked out/);
-  assert.match(client, /PUT BACK INSIDE/);
-  assert.match(client, /YES, PUT BACK/);
-  assert.match(client, /YES, DELETE/);
-  assert.match(client, /DELETE ALL RECORDS/);
-  assert.match(client, /YES, DELETE ALL/);
+  assert.match(client, /Put back inside/);
+  assert.match(client, /Yes, put back/);
+  assert.match(client, /Yes, delete/);
+  assert.match(client, /Delete all records/);
+  assert.match(client, /Yes, delete all/);
   assert.match(client, /deleteRecentLocalFamily/);
   assert.match(client, /deleteAllRecentLocalFamilies/);
   assert.match(client, /ENTRY_LOCK_MILLISECONDS = 700/);
@@ -151,8 +151,8 @@ test("keeps phone control local and exposes only a read-only live mirror", async
     client,
     /pax freed`[\s\S]*?undo: saved \? \{ id: liveFamily\.id \} : undefined,\s*\}\);/,
   );
-  assert.match(client, /RECORDED ✓/);
-  assert.match(client, /NEXT DUE/);
+  assert.match(client, /Added ✓/);
+  assert.match(client, /Next due/);
   assert.doesNotMatch(
     client,
     /ThemeToggle|THEME_STORAGE_KEY|handleThemeToggle|setTheme|data-theme/,
@@ -160,11 +160,11 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(css, /data-theme="dark"|theme-toggle|guest-theme-row/);
   assert.match(
     client,
-    /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*className="family-due-time"[\s\S]*DUE \{formatClock\(familyDueAt\(family\)\)\}/,
+    /In \{formatClock\(family\.enteredAt\)\}[\s\S]*className="family-due-time"[\s\S]*Due \{formatClock\(familyDueAt\(family\)\)\}/,
   );
   assert.doesNotMatch(
     client,
-    /DUE \{formatClock\(familyDueAt\(family\)\)\}[\s\S]*\{family\.timeLimitMinutes\} MIN/,
+    /Due \{formatClock\(familyDueAt\(family\)\)\}[\s\S]*\{family\.timeLimitMinutes\} min/i,
   );
   assert.match(
     css,
@@ -176,31 +176,31 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(client, /\+5 MIN/);
   assert.doesNotMatch(client, /LIVE TOTAL AFTER SAVE/);
   assert.doesNotMatch(client, /recommended \/ no names/);
-  assert.match(client, /`ENTER: \$\{selectedPax\} PAX`/);
+  assert.match(client, /`Enter \$\{selectedPax\} pax`/);
   assert.doesNotMatch(client, /PAX FITS|ENTER FAMILY/);
   assert.doesNotMatch(css, /admission-result|result-fit/);
   assert.doesNotMatch(client, /to target after entry/);
-  assert.match(client, /activeFamilies\.length === 0[\s\S]*\? "EMPTY"/);
-  assert.match(client, /activeFamilies\.length === 1 \? "FAMILY" : "FAMILIES"/);
+  assert.match(client, /activeFamilies\.length === 0[\s\S]*\? "No families"/);
+  assert.match(client, /activeFamilies\.length === 1 \? "family" : "families"/);
   assert.match(client, /Decrease time limit by 1 minute/);
   assert.match(client, /Extend time limit by 1 minute/);
-  assert.match(client, /SAVE COUNT CORRECTION/);
+  assert.match(client, /Save this count change\?/);
   assert.match(client, /Last 15 min · put a family back if OUT was a mistake/);
   assert.doesNotMatch(client, /deletes in \d|delete(?:s|d)? in \{?/i);
   assert.match(
     client,
-    /className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, OUT\s*</,
+    /className="confirm-actions"[\s\S]*?>\s*No\s*<\/[\s\S]*?>\s*Yes, check out\s*</,
   );
   assert.match(
     client,
-    /confirm-delete-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE\s*</,
+    /confirm-delete-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*No\s*<\/[\s\S]*?>\s*Yes, delete\s*</,
   );
   assert.match(
     client,
-    /confirm-delete-all-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*NO\s*<\/[\s\S]*?>\s*YES, DELETE ALL\s*</,
+    /confirm-delete-all-title[\s\S]*?className="confirm-actions"[\s\S]*?>\s*No\s*<\/[\s\S]*?>\s*Yes, delete all\s*</,
   );
-  assert.match(client, /YES, ENTER/);
-  assert.match(client, /ENTER ABOVE \{CAPACITY\}\?/);
+  assert.match(client, /Yes, enter/);
+  assert.match(client, /Enter above \{CAPACITY\}\?/);
   assert.doesNotMatch(client, />\s*INSTALL APP\s*</);
   assert.doesNotMatch(client, />\s*LOCK\s*</);
   assert.doesNotMatch(client, />\s*NEW SHIFT\s*</);

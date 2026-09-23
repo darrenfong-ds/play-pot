@@ -41,7 +41,7 @@ test("flags a family from an earlier Singapore day without changing its record",
   ]);
   assert.match(
     client,
-    /isFromEarlierDay\(family\.enteredAt, now\)[\s\S]*?FROM EARLIER DAY[\s\S]*?IN \{formatShortDate\(family\.enteredAt\)\}/,
+    /isFromEarlierDay\(family\.enteredAt, now\)[\s\S]*?From an earlier day[\s\S]*?In \{formatShortDate\(family\.enteredAt\)\}/,
   );
   assert.match(css, /\.stale-entry-flag\s*\{/);
   assert.doesNotMatch(localCore, /isFromEarlierDay|time-format/);
@@ -73,5 +73,5 @@ test("shows every time as 5:10 PM in Singapore time", async () => {
     assert.match(source, /import \{[^}]*\bformatClock\b[^}]*\} from "\.{1,2}\/time-format"/);
     assert.doesNotMatch(source, /function formatClock|new Intl\.DateTimeFormat|toLocale(?:Time)?String/);
   }
-  assert.match(client, /IN \{formatClock\(family\.enteredAt\)\}[\s\S]*?OUT \{formatClock\(family\.departedAt\)\}/);
+  assert.match(client, /In \{formatClock\(family\.enteredAt\)\}[\s\S]*?Out \{formatClock\(family\.departedAt\)\}/);
 });
