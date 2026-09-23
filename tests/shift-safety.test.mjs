@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function readSource(path) {
@@ -152,6 +152,19 @@ test("allows pinch zoom", async () => {
   const viewport = html.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
   assert.equal(viewport, "width=device-width, initial-scale=1");
   assert.doesNotMatch(html, /maximum-scale|user-scalable=no/);
+});
+
+test("has no auth that trusts client-supplied oai-* headers", async () => {
+  await assert.rejects(access(new URL("../app/chatgpt-auth.ts", import.meta.url)));
+  for (const directory of ["app", "worker"]) {
+    const files = await readdir(new URL(`../${directory}`, import.meta.url), {
+      recursive: true,
+    });
+    for (const file of files.filter((name) => /\.(tsx?|mjs|js)$/.test(name))) {
+      const source = await readSource(`${directory}/${file.replaceAll("\\", "/")}`);
+      assert.doesNotMatch(source, /chatgpt-auth|oai-authenticated/i, `${directory}/${file}`);
+    }
+  }
 });
 
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
