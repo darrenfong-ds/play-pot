@@ -428,6 +428,7 @@ export default function PlayPotApp() {
   const [deleteCandidate, setDeleteCandidate] = useState<Family | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [confirmStartFresh, setConfirmStartFresh] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
   const [entryLocked, setEntryLocked] = useState(false);
   const [entryRecorded, setEntryRecorded] = useState(false);
@@ -775,6 +776,7 @@ export default function PlayPotApp() {
     confirmDeleteAll,
     editCandidate,
     confirmStartFresh,
+    confirmReset,
   ]);
 
   useEffect(() => {
@@ -785,7 +787,8 @@ export default function PlayPotApp() {
       !deleteCandidate &&
       !confirmDeleteAll &&
       !editCandidate &&
-      !confirmStartFresh
+      !confirmStartFresh &&
+      !confirmReset
     ) {
       return;
     }
@@ -799,6 +802,7 @@ export default function PlayPotApp() {
         setConfirmDeleteAll(false);
         setEditCandidate(null);
         setConfirmStartFresh(false);
+        setConfirmReset(false);
         const returnTarget = confirmationReturnFocusRef.current;
         confirmationReturnFocusRef.current = null;
         window.setTimeout(() => returnTarget?.focus(), 0);
@@ -838,6 +842,7 @@ export default function PlayPotApp() {
     confirmDeleteAll,
     editCandidate,
     confirmStartFresh,
+    confirmReset,
   ]);
 
   function cancelOpenConfirmation() {
@@ -848,6 +853,7 @@ export default function PlayPotApp() {
     setConfirmDeleteAll(false);
     setEditCandidate(null);
     setConfirmStartFresh(false);
+    setConfirmReset(false);
     const returnTarget = confirmationReturnFocusRef.current;
     confirmationReturnFocusRef.current = null;
     window.setTimeout(() => returnTarget?.focus(), 0);
@@ -1134,6 +1140,24 @@ export default function PlayPotApp() {
     setNotice({ tone: "info", message: "Fresh record started on this phone." });
   }
 
+  function handleResetAll() {
+    const saved = commitState(createInitialState(Date.now(), crypto.randomUUID()), {
+      mirrorToBackup: true,
+    });
+    setNotice({
+      tone: saved ? "success" : "error",
+      message: saved
+        ? "All clear · Play Pot is reset and numbering starts at #1"
+        : "Reset not saved: this phone could not save it. Try again.",
+    });
+    if (saved) {
+      setCustomAdults(1);
+      setCustomChildren(1);
+      setVisual("");
+      vibrate();
+    }
+  }
+
   if (authState === "locked") {
     return (
       <main className="guest-screen">
@@ -1349,6 +1373,28 @@ export default function PlayPotApp() {
                   : `full at ${FLEX_CAPACITY}`}
             </span>
           </div>
+          <button
+            type="button"
+            className="reset-button"
+            disabled={busy || (activeFamilies.length === 0 && recentlyOut.length === 0)}
+            onClick={(event) => {
+              confirmationReturnFocusRef.current = event.currentTarget;
+              confirmationHandledRef.current = false;
+              setConfirmReset(true);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Reset
+          </button>
         </div>
 
         {unsaved ? (
@@ -1847,6 +1893,57 @@ export default function PlayPotApp() {
                 }}
               >
                 Yes, save
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {confirmReset ? (
+        <div className="confirm-overlay">
+          <section
+            ref={confirmationDialogRef}
+            className="confirm-dialog confirm-dialog-delete"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-reset-title"
+            aria-describedby="confirm-reset-copy"
+          >
+            <h2 id="confirm-reset-title">Reset to a clean slate?</h2>
+            <p id="confirm-reset-copy">
+              This clears everything on this phone:{" "}
+              <strong>
+                {activeFamilies.length}{" "}
+                {activeFamilies.length === 1 ? "family" : "families"} inside ({paxInside}{" "}
+                pax)
+              </strong>{" "}
+              and{" "}
+              <strong>
+                {recentlyOut.length} checked-out{" "}
+                {recentlyOut.length === 1 ? "record" : "records"}
+              </strong>
+              . Numbering starts again at #1. This can&apos;t be undone.
+            </p>
+            <div className="confirm-actions">
+              <button
+                ref={cancelConfirmationRef}
+                type="button"
+                className="confirm-no"
+                onClick={handleConfirmationNo}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                className="confirm-yes"
+                onClick={() => {
+                  if (!claimConfirmation()) return;
+                  setConfirmReset(false);
+                  confirmationReturnFocusRef.current = null;
+                  handleResetAll();
+                }}
+              >
+                Yes, reset all
               </button>
             </div>
           </section>

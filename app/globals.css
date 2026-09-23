@@ -156,7 +156,7 @@ input::placeholder {
 /* One fixed-height row: nothing appears here later to push the page down. */
 .capacity-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.3rem 1rem 0.35rem;
@@ -235,6 +235,25 @@ input::placeholder {
   line-height: 1.2;
   letter-spacing: 0.01em;
   text-align: center;
+}
+
+/* Quiet on purpose: top right, away from the thumb, and it always asks first. */
+.reset-button {
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 14px;
+  background: transparent;
+  color: #d9e8e7;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.reset-button:active {
+  background: var(--header-soft);
 }
 
 .storage-alert {
@@ -1757,6 +1776,15 @@ input::placeholder {
 
 /* 320-wide phones: tighter columns, and IN and DUE on two lines. */
 @media (max-width: 340px) {
+  .spaces-card {
+    min-width: 5.25rem;
+    padding-inline: 0.4rem;
+  }
+
+  .reset-button {
+    padding-inline: 0.5rem;
+  }
+
   .family-card {
     grid-template-columns: 3.4rem minmax(0, 1fr) 3.9rem;
     gap: 0.4rem;

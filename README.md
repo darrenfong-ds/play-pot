@@ -21,6 +21,8 @@ The site is an installable web app. Staff use the shared six-digit staff PIN to 
 
 `Out` first asks for confirmation with `No` on the left and `Yes, check out` on the right. A confirmed OUT also offers a short undo. For accidental check-outs, a collapsed `Checked out` control directly above the active family cards keeps the family number, adult/child count, visual, IN time, OUT time, and timer setting for up to 15 minutes. `Put back inside` restores a family with its original IN time. Staff can also manually delete one recent record after a second confirmation, with `No` on the left and `Yes, delete` on the right.
 
+`Reset` at the top right clears the whole phone to a clean slate: every family inside and every checked-out record, after a `No` / `Yes, reset all` confirmation. Numbering then starts again at #1. It cannot be undone.
+
 After 15 minutes, the completed family record is removed from this phone's current and backup site storage while the app is open, or immediately on the next opening if the app was closed. This is recovery-only, not permanent visitor history. Corrections and restores can reveal a true count above 20, but all new entry stays blocked until the live count returns to 20 or below.
 
 Clearing browser or installed-app site data erases that phone's Play Pot record. Use one phone for one operating record because devices do not share capacity.
