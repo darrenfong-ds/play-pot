@@ -20,7 +20,11 @@
   --coral-dark: #982724;
   --amber: #f4bd45;
   --amber-soft: #fff1bd;
-  --due-time: #9b4b00;
+  /* Dark enough to show as a clear edge in glare or greyscale. */
+  --amber-strong: #a36c00;
+  /* DUE times stay neutral until they pass; amber is reserved for overdue. */
+  --due-time: #16313a;
+  --due-overdue: #8a4b00;
   --green-soft: #dff5ea;
   --red-soft: #ffe1de;
   --focus: rgba(20, 156, 143, 0.44);
@@ -42,13 +46,28 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+  /* Phones have system-ui (SF Pro, Roboto) with real heavy weights; Aptos and Segoe UI are desktop-only. */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: 16px;
+}
+
+/* Tailwind's preflight resets headings to weight 400. */
+h1,
+h2 {
+  font-weight: 800;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 body,
 .status-header,
-.admission-composer,
 .family-card,
 .family-editor,
 .recent-out-section details,
@@ -57,7 +76,7 @@ body,
 .text-input,
 .guest-pin-input,
 .stepper button,
-.front-counts .stepper,
+.count-stepper button,
 .spaces-card,
 .timer-pill {
   transition:
@@ -124,31 +143,18 @@ input::placeholder {
   margin-inline: auto;
 }
 
-.brand-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.72rem 1rem 0.2rem;
-}
-
-.brand-row h1 {
-  margin: 0;
-  font-size: 1.08rem;
-  line-height: 1;
-  letter-spacing: 0.045em;
-}
-
+/* One fixed-height row: nothing appears here later to push the page down. */
 .capacity-row {
   display: grid;
-  grid-template-columns: 1.55fr 0.85fr;
-  gap: 0.55rem;
-  padding: 0.45rem 1rem 0.72rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 1rem 0.45rem;
 }
 
 .capacity-number,
 .spaces-card {
-  min-height: 60px;
+  min-height: 3.1rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -163,9 +169,10 @@ input::placeholder {
 }
 
 .capacity-number strong {
-  font-size: clamp(2.7rem, 13vw, 4.1rem);
-  line-height: 0.9;
-  letter-spacing: -0.075em;
+  font-size: 2.9rem;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
 }
 
 .capacity-number.capacity-safe strong {
@@ -178,28 +185,32 @@ input::placeholder {
 
 .capacity-number span {
   color: #cee0df;
-  font-size: 0.92rem;
-  font-weight: 900;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .spaces-card {
+  min-width: 6.5rem;
+  max-width: 9.5rem;
   align-items: center;
+  padding: 0.3rem 0.6rem;
   background: var(--header-soft);
 }
 
 .spaces-card strong {
-  font-size: 1.7rem;
+  font-size: 1.6rem;
+  font-weight: 900;
   line-height: 1;
 }
 
 .spaces-card span {
   max-width: 100%;
-  margin-top: 0.3rem;
-  color: #c7dcdb;
-  font-size: 0.62rem;
-  font-weight: 900;
-  line-height: 1.25;
-  letter-spacing: 0.07em;
+  margin-top: 0.15rem;
+  color: #d9e8e7;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
   text-align: center;
 }
 
@@ -217,23 +228,24 @@ input::placeholder {
   background: #8b5b05;
 }
 
+/*
+ * The list sits on the entry dock like a chat: it fills from the bottom, so the
+ * family due next is directly above ENTER. The bottom padding is the dock
+ * (16.125rem) plus a small gap, and also clears the notice lane inside it.
+ */
 .content-stack {
   width: min(100%, 760px);
+  min-height: calc(100vh - 4.3rem - env(safe-area-inset-top));
+  min-height: calc(100dvh - 4.3rem - env(safe-area-inset-top));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   margin-inline: auto;
-  padding: 0.8rem 0.75rem calc(7rem + env(safe-area-inset-bottom));
+  padding: 0.8rem 0.75rem calc(17rem + env(safe-area-inset-bottom));
 }
 
-.admission-section,
-.operating-section,
 .recent-out-section {
   margin-bottom: 1rem;
-}
-
-.admission-composer {
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
 }
 
 .section-heading {
@@ -252,14 +264,56 @@ input::placeholder {
 
 .section-count {
   color: var(--muted);
-  font-size: 0.66rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 .front-counts {
   display: grid;
-  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.count-stepper {
+  height: 3.5rem;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  padding: 0.18rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.count-stepper button {
+  height: 3rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.count-stepper-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.count-stepper-value strong {
+  font-size: 1.45rem;
+  font-weight: 900;
+}
+
+.count-stepper-value small {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .stepper {
@@ -268,13 +322,6 @@ input::placeholder {
   grid-template-columns: 1fr 48px 38px 48px;
   align-items: center;
   gap: 0.35rem;
-}
-
-.front-counts .stepper {
-  padding: 0.15rem 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-soft);
 }
 
 .stepper-label {
@@ -295,10 +342,6 @@ input::placeholder {
 .stepper strong {
   text-align: center;
   font-size: 1.05rem;
-}
-
-.quick-details {
-  margin-top: 0.9rem;
 }
 
 .field-label {
@@ -331,14 +374,13 @@ input::placeholder {
 
 .commit-family-button {
   width: 100%;
-  min-height: 62px;
-  margin-top: 0.65rem;
+  height: 3.75rem;
   border: 0;
   border-radius: 14px;
   background: var(--teal-fill);
   color: #fff;
-  font-size: 0.9rem;
-  font-weight: 950;
+  font-size: 1.1rem;
+  font-weight: 900;
   letter-spacing: 0.04em;
 }
 
@@ -355,16 +397,58 @@ input::placeholder {
   padding-top: 0.35rem;
 }
 
+/*
+ * Fixed entry dock. Its parts have fixed heights so the notice lane sits at a
+ * known offset: 12.125rem from the bottom (gap + steppers + gap + visual + gap
+ * + ENTER + bottom padding), with the lane itself 3.5rem tall.
+ */
+.entry-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: min(100%, 760px);
+  display: grid;
+  gap: 0.5rem;
+  margin-inline: auto;
+  padding: 0.5rem 0.55rem calc(0.5rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -8px 22px var(--page-shadow);
+}
+
+.entry-dock .visual-input {
+  height: 2.875rem;
+  min-height: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.dock-lane {
+  height: 3.5rem;
+}
+
+.dock-lane-idle {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .next-due {
-  width: calc(100% - 2rem);
-  max-width: 728px;
-  min-height: 50px;
+  height: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.55rem;
-  margin: -0.15rem auto 0.72rem;
-  padding: 0.55rem 0.72rem;
+  padding: 0.4rem 0.75rem;
   border: 1px solid var(--teal);
   border-radius: 12px;
   background: var(--green-soft);
@@ -373,29 +457,31 @@ input::placeholder {
 
 .next-due > span:first-child {
   color: var(--teal);
-  font-size: 0.65rem;
-  font-weight: 950;
-  letter-spacing: 0.075em;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
 }
 
 .next-due strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.86rem;
-  font-weight: 950;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .next-due > em {
   text-align: right;
-  font-size: 0.7rem;
+  font-size: 0.9rem;
   font-style: normal;
-  font-weight: 950;
-  letter-spacing: 0.025em;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
+/* Overdue also gets a dark edge, so it differs from on-time in greyscale too. */
 .next-due-overdue {
-  border-color: var(--amber);
+  border: 2px solid var(--amber-strong);
   background: var(--amber-soft);
 }
 
@@ -410,15 +496,22 @@ input::placeholder {
 
 .family-card {
   overflow: hidden;
-  padding: 0.9rem;
+  padding: 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--surface);
 }
 
+/* Overdue: tinted card, dark amber edge and solid amber timer. */
 .family-card-due {
-  border-color: var(--amber);
-  box-shadow: inset 4px 0 0 var(--amber);
+  border: 2px solid var(--amber-strong);
+  background: var(--amber-soft);
+  box-shadow: inset 6px 0 0 var(--amber-strong);
+}
+
+.family-card-next {
+  outline: 3px solid var(--aqua);
+  outline-offset: 2px;
 }
 
 .family-main {
@@ -429,38 +522,60 @@ input::placeholder {
 }
 
 .family-id-block {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
+.family-id-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  align-items: baseline;
+}
+
 .family-id {
-  font-size: 1.45rem;
-  font-weight: 950;
-  letter-spacing: -0.04em;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .family-pax {
   color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 850;
+  font-size: 0.8rem;
+  font-weight: 800;
 }
 
 .timer-pill {
-  min-width: 110px;
+  min-width: 5.4rem;
   display: flex;
+  flex: none;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding: 0.58rem 0.63rem;
-  border-radius: 10px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 12px;
   background: var(--surface-soft);
   color: var(--ink);
+  text-align: center;
+}
+
+.timer-pill strong {
+  font-size: 1.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.timer-pill span {
+  margin-top: 0.15rem;
   font-size: 0.72rem;
-  letter-spacing: 0.025em;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .timer-due {
-  background: var(--amber-soft);
+  border: 2px solid var(--amber-strong);
+  background: var(--amber);
 }
 
 .stale-entry-flag {
@@ -487,7 +602,7 @@ input::placeholder {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: baseline;
   gap: 0.75rem;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 900;
@@ -504,12 +619,18 @@ input::placeholder {
   text-align: right;
 }
 
+.family-card-due .family-due-time {
+  color: var(--due-overdue);
+}
+
+/* What they're wearing is what staff match against the room, so it leads the card. */
 .visual-note {
-  min-height: 22px;
-  margin: 0.58rem 0;
+  margin: 0;
+  overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 0.88rem;
-  font-weight: 750;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .visual-missing {
@@ -518,30 +639,33 @@ input::placeholder {
   font-weight: 600;
 }
 
+/* A small Edit on the left, a wide OUT on the right where the thumb lands. */
 .family-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
   align-items: start;
   gap: 0.6rem;
+  margin-top: 0.65rem;
 }
 
 .family-editor {
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 1.5px solid var(--field-line);
+  border-radius: 13px;
   background: var(--surface);
+  scroll-margin-top: 5rem;
+  scroll-margin-bottom: calc(17rem + env(safe-area-inset-bottom));
 }
 
 .family-editor summary {
-  min-height: 56px;
+  min-height: 52px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.7rem 0.8rem;
+  justify-content: center;
+  padding: 0.5rem;
   cursor: pointer;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.045em;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
   list-style: none;
 }
 
@@ -549,13 +673,26 @@ input::placeholder {
   display: none;
 }
 
-.family-editor summary::after {
-  content: "+";
-  font-size: 1.2rem;
+.family-editor[open] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.family-editor[open] summary {
+  justify-content: space-between;
+  padding-inline: 0.8rem;
+  color: var(--muted);
 }
 
 .family-editor[open] summary::after {
-  content: "-";
+  content: "Close";
+  font-size: 0.85rem;
+}
+
+/* While editing, OUT stays on top so SAVE and OUT are never neighbours. */
+.family-editor[open] + .out-button {
+  grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 .editor-body {
@@ -629,14 +766,14 @@ input::placeholder {
 }
 
 .out-button {
-  min-height: 58px;
+  min-height: 52px;
   border: 0;
   border-radius: 13px;
   background: var(--coral-fill);
   color: #fff;
-  font-size: 0.88rem;
-  font-weight: 950;
-  letter-spacing: 0.055em;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
 }
 
 .empty-state {
@@ -722,7 +859,7 @@ input::placeholder {
 .recent-out-section summary small {
   margin-top: 0.18rem;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
@@ -766,7 +903,7 @@ input::placeholder {
 .recent-out-main span,
 .recent-out-times {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
@@ -778,7 +915,7 @@ input::placeholder {
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
@@ -799,20 +936,21 @@ input::placeholder {
 .delete-recent-button {
   min-height: 48px;
   border-radius: 11px;
-  font-size: 0.7rem;
-  font-weight: 950;
+  font-size: 0.85rem;
+  font-weight: 900;
   letter-spacing: 0.035em;
 }
 
+/* Restoring is the reason this panel exists, so it is the stronger button. */
 .restore-button {
-  border: 1px solid var(--teal);
-  background: transparent;
-  color: var(--teal);
+  border: 0;
+  background: var(--teal-fill);
+  color: #fff;
 }
 
 .delete-recent-button {
   border: 1px solid var(--coral);
-  background: var(--red-soft);
+  background: transparent;
   color: var(--coral-dark);
 }
 
@@ -824,8 +962,8 @@ input::placeholder {
   border-radius: 11px;
   background: transparent;
   color: var(--coral-dark);
-  font-size: 0.7rem;
-  font-weight: 950;
+  font-size: 0.85rem;
+  font-weight: 900;
   letter-spacing: 0.035em;
 }
 
@@ -952,27 +1090,29 @@ input::placeholder {
   line-height: 1.4;
 }
 
+/* Sits exactly over the dock's NEXT DUE lane, so it never covers a button. */
 .toast {
   position: fixed;
-  right: 0.75rem;
-  bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  left: 0.75rem;
+  right: 0.55rem;
+  bottom: calc(12.125rem + env(safe-area-inset-bottom));
+  left: 0.55rem;
   z-index: 50;
-  width: min(calc(100% - 1.5rem), 620px);
-  min-height: 58px;
+  width: min(calc(100% - 1.1rem), 740px);
+  min-height: 3.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.7rem;
   margin-inline: auto;
-  padding: 0.7rem 0.78rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.8rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 14px;
+  border-radius: 12px;
   background: #17383f;
   color: #fff;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.32);
-  font-size: 0.78rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: 0.95rem;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .toast-error {
@@ -1015,20 +1155,33 @@ input::placeholder {
 
 .confirm-dialog h2 {
   margin: 0;
-  font-size: 1.18rem;
-  letter-spacing: -0.02em;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
 }
 
 .confirm-dialog p {
   margin: 0.5rem 0 1rem;
-  color: var(--muted);
-  font-size: 0.88rem;
+  color: var(--ink);
+  font-size: 1rem;
   line-height: 1.45;
 }
 
-.confirm-dialog-overflow h2,
-.confirm-dialog-overflow p {
-  color: var(--coral-dark);
+/* Above 15: amber edge and heading, body left readable. */
+.confirm-dialog-overflow {
+  border-top-color: var(--amber-strong);
+}
+
+.confirm-dialog-overflow h2 {
+  color: var(--due-overdue);
+}
+
+/* Safe, reversible confirmations get a teal YES; red stays for OUT and deletes. */
+.confirm-dialog-safe {
+  border-top-color: var(--teal);
+}
+
+.confirm-dialog-safe .confirm-yes {
+  background: var(--teal-fill);
 }
 
 .confirm-actions {
@@ -1040,8 +1193,8 @@ input::placeholder {
 .confirm-actions button {
   min-height: 56px;
   border-radius: 13px;
-  font-size: 0.82rem;
-  font-weight: 950;
+  font-size: 1rem;
+  font-weight: 900;
   letter-spacing: 0.035em;
 }
 
@@ -1092,7 +1245,7 @@ input::placeholder {
   color: var(--muted);
 }
 
-.loading-screen button {
+.loading-screen > button {
   min-height: 50px;
   margin-top: 0.5rem;
   padding: 0.6rem 1.2rem;
@@ -1101,6 +1254,23 @@ input::placeholder {
   background: var(--teal-fill);
   color: #fff;
   font-weight: 900;
+}
+
+.loading-screen .loading-slow {
+  margin-top: 0.5rem;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* The start-fresh sheet sits inside the centred loading screen; undo its text rules. */
+.loading-screen .confirm-dialog {
+  text-align: left;
+}
+
+.loading-screen .confirm-dialog p {
+  max-width: none;
+  margin: 0.5rem 0 1rem;
+  color: var(--ink);
 }
 
 .admin-login-screen {
@@ -1420,7 +1590,17 @@ input::placeholder {
 
 .admin-family-timing strong {
   color: var(--teal);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Overdue must not share the on-time teal. */
+.admin-family-row-due {
+  border: 2px solid var(--amber-strong);
+  background: var(--amber-soft);
+}
+
+.admin-family-row-due .admin-family-timing strong {
+  color: var(--due-overdue);
 }
 
 .admin-family-row > p {
@@ -1481,17 +1661,9 @@ input::placeholder {
     padding-inline: 0.55rem;
   }
 
-  .brand-row,
   .capacity-row {
-    padding-inline: 0.75rem;
-  }
-
-  .brand-row {
     gap: 0.5rem;
-  }
-
-  .capacity-row {
-    gap: 0.38rem;
+    padding-inline: 0.75rem;
   }
 
   .capacity-number strong {
@@ -1499,29 +1671,42 @@ input::placeholder {
   }
 
   .family-actions {
-    grid-template-columns: minmax(0, 1fr) 92px;
+    grid-template-columns: 4.75rem minmax(0, 1fr);
   }
 
+  .timer-pill {
+    min-width: 4.9rem;
+  }
+
+  .next-due {
+    gap: 0.4rem;
+    padding-inline: 0.6rem;
+  }
+
+  .next-due > span:first-child {
+    font-size: 0.68rem;
+  }
 }
 
-@media (max-width: 460px) {
-  .family-editor[open],
-  .family-editor[open] + .out-button {
-    grid-column: 1 / -1;
+/* On short phones an open editor needs the whole screen; ENTER returns on Close or Save. */
+@media (max-height: 700px) {
+  body:has(.family-editor[open]) .entry-dock,
+  body:has(.family-editor[open]) .toast {
+    display: none;
   }
 
-  .family-editor[open] + .out-button {
-    grid-row: 2;
+  body:has(.family-editor[open]) .content-stack {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  body:has(.family-editor[open]) .family-editor {
+    scroll-margin-bottom: 1rem;
   }
 }
 
 @media (min-width: 680px) {
   .content-stack {
     padding-inline: 1rem;
-  }
-
-  .front-counts {
-    grid-template-columns: 1fr 1fr;
   }
 
   .confirm-overlay {

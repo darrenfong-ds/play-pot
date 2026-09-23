@@ -25,6 +25,10 @@ function timerLabel(family: LiveFamilyRecord, now: number) {
   return `${Math.max(1, Math.ceil(remaining / 60_000))} MIN LEFT`;
 }
 
+function isOverdue(family: LiveFamilyRecord, now: number) {
+  return Date.parse(family.enteredAt) + family.timeLimitMinutes * 60_000 <= now;
+}
+
 function familyPax(family: LiveFamilyRecord) {
   return family.adults + family.children;
 }
@@ -62,7 +66,12 @@ function DeviceCard({ device, now }: { device: AdminLiveDevice; now: number }) {
       {device.insideFamilies.length ? (
         <div className="admin-family-list">
           {device.insideFamilies.map((family) => (
-            <div className="admin-family-row" key={family.id}>
+            <div
+              className={`admin-family-row ${
+                isOverdue(family, now) ? "admin-family-row-due" : ""
+              }`}
+              key={family.id}
+            >
               <div className="admin-family-main">
                 <strong>
                   #{family.familyNumber} | {familyPax(family)} PAX

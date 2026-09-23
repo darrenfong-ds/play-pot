@@ -137,6 +137,48 @@ function Stepper({
   );
 }
 
+// Two of these sit side by side in the entry dock, so the unit sits under the number.
+function CountStepper({
+  label,
+  units,
+  value,
+  onChange,
+  min = 1,
+  max = FLEX_CAPACITY,
+}: {
+  label: string;
+  units: [string, string];
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <div className="count-stepper" role="group" aria-label={`${label}: ${value}`}>
+      <button
+        type="button"
+        aria-label={`Remove one ${label.toLowerCase()}`}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+      >
+        −
+      </button>
+      <span className="count-stepper-value">
+        <strong>{value}</strong>
+        <small>{value === 1 ? units[0] : units[1]}</small>
+      </span>
+      <button
+        type="button"
+        aria-label={`Add one ${label.toLowerCase()}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 function FamilyEditor({
   family,
   onSave,
@@ -175,7 +217,12 @@ function FamilyEditor({
     <details
       className="family-editor"
       open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        const editor = event.currentTarget;
+        setOpen(editor.open);
+        // Its scroll margins keep the opened editor clear of the header and the entry dock.
+        if (editor.open) editor.scrollIntoView({ block: "nearest" });
+      }}
     >
       <summary aria-label={`Edit ${familyLabel(family)}`}>Edit</summary>
       <div className="editor-body">
@@ -261,12 +308,14 @@ function ActiveFamilyCard({
   family,
   now,
   disabled,
+  isNextDue,
   onOut,
   onEdit,
 }: {
   family: Family;
   now: number;
   disabled: boolean;
+  isNextDue: boolean;
   onOut: (trigger: HTMLButtonElement) => void;
   onEdit: (
     adults: number,
@@ -278,9 +327,15 @@ function ActiveFamilyCard({
 }) {
   const timer = timerState(family, now);
   const fromEarlierDay = isFromEarlierDay(family.enteredAt, now);
+  // "12 MIN LEFT" shows as a large 12 over a small MIN LEFT.
+  const [timerLead, ...timerRest] = timer.label.split(" ");
 
   return (
-    <article className={`family-card ${timer.overdue ? "family-card-due" : ""}`}>
+    <article
+      className={`family-card ${timer.overdue ? "family-card-due" : ""} ${
+        isNextDue ? "family-card-next" : ""
+      }`}
+    >
       {fromEarlierDay ? (
         <p className="stale-entry-flag" role="note">
           <strong>FROM EARLIER DAY</strong>
@@ -289,15 +344,21 @@ function ActiveFamilyCard({
       ) : null}
       <div className="family-main">
         <div className="family-id-block">
-          <span className="family-id">
-            {familyLabel(family)} | {familyPax(family)} PAX
-          </span>
-          <span className="family-pax">
-            {familyBreakdown(family)}
+          <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
+            {family.visual || "No visual yet"}
+          </p>
+          <span className="family-id-line">
+            <span className="family-id">
+              {familyLabel(family)} | {familyPax(family)} PAX
+            </span>
+            <span className="family-pax">
+              {familyBreakdown(family)}
+            </span>
           </span>
         </div>
         <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
-          <strong>{timer.label}</strong>
+          <strong>{timerLead}</strong>
+          <span>{timerRest.join(" ")}</span>
         </div>
       </div>
 
@@ -307,10 +368,6 @@ function ActiveFamilyCard({
           DUE {formatClock(familyDueAt(family))}
         </span>
       </div>
-
-      <p className={family.visual ? "visual-note" : "visual-note visual-missing"}>
-        {family.visual || "No visual yet"}
-      </p>
 
       <div className="family-actions">
         <FamilyEditor
@@ -357,6 +414,10 @@ export default function PlayPotApp() {
   const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
   const [entryLocked, setEntryLocked] = useState(false);
   const [entryRecorded, setEntryRecorded] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
+  // The list is anchored to the entry dock; stay pinned to the bottom unless staff scrolled up.
+  const stickToBottomRef = useRef(true);
+  const guestPinInputRef = useRef<HTMLInputElement | null>(null);
   const entryLockRef = useRef(false);
   const entryUnlockTimerRef = useRef<number | null>(null);
   const cancelConfirmationRef = useRef<HTMLButtonElement | null>(null);
@@ -454,7 +515,11 @@ export default function PlayPotApp() {
       saved = false;
       setUnsaved(true);
     }
-    if (saved) showState(sanitizedNext);
+    if (saved) {
+      showState(sanitizedNext);
+      // A new card must not show "16 MIN LEFT" until the next clock tick.
+      setNow(savedAt);
+    }
     return saved;
   }
 
@@ -656,6 +721,32 @@ export default function PlayPotApp() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
+  // On a weak signal the first open can take 10 s; say so instead of looking frozen.
+  useEffect(() => {
+    const slow = window.setTimeout(() => setSlowLoad(true), 4_000);
+    return () => window.clearTimeout(slow);
+  }, []);
+
+  useEffect(() => {
+    if (authState === "locked") guestPinInputRef.current?.focus();
+  }, [authState]);
+
+  useEffect(() => {
+    const trackBottom = () => {
+      stickToBottomRef.current =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 96;
+    };
+    window.addEventListener("scroll", trackBottom, { passive: true });
+    return () => window.removeEventListener("scroll", trackBottom);
+  }, []);
+
+  // Keeps the family due next directly above ENTER after every change.
+  useLayoutEffect(() => {
+    if (authState !== "ready" || !state || !stickToBottomRef.current) return;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+  }, [authState, state]);
+
   // A layout effect stamps the open time before any later tap is handled.
   useLayoutEffect(() => {
     confirmationOpenedAtRef.current = performance.now();
@@ -774,7 +865,11 @@ export default function PlayPotApp() {
 
   async function handleGuestUnlock(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (guestPin.length !== 6 || pending) return;
+    await unlockWithPin(guestPin);
+  }
+
+  async function unlockWithPin(pin: string) {
+    if (pin.length !== 6 || pending) return;
 
     setPending("unlock");
     setUnlockError("");
@@ -782,7 +877,7 @@ export default function PlayPotApp() {
       const response = await fetch("/api/guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: guestPin }),
+        body: JSON.stringify({ pin }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -1036,6 +1131,7 @@ export default function PlayPotApp() {
           <form className="guest-form" onSubmit={(event) => void handleGuestUnlock(event)}>
             <label htmlFor="guest-pin">Guest PIN</label>
             <input
+              ref={guestPinInputRef}
               id="guest-pin"
               className="guest-pin-input"
               type="password"
@@ -1044,9 +1140,12 @@ export default function PlayPotApp() {
               pattern="[0-9]*"
               maxLength={6}
               value={guestPin}
-              onChange={(event) =>
-                setGuestPin(event.target.value.replace(/\D/g, "").slice(0, 6))
-              }
+              onChange={(event) => {
+                const pin = event.target.value.replace(/\D/g, "").slice(0, 6);
+                setGuestPin(pin);
+                // The sixth digit unlocks without a separate tap on ENTER.
+                if (pin.length === 6) void unlockWithPin(pin);
+              }}
               aria-describedby={
                 unlockError ? "guest-pin-hint guest-error" : "guest-pin-hint"
               }
@@ -1144,7 +1243,15 @@ export default function PlayPotApp() {
             </button>
           </>
         ) : (
-          <p>Opening this phone&apos;s shift...</p>
+          <>
+            <p>Opening this phone&apos;s shift...</p>
+            {slowLoad ? (
+              <p className="loading-slow" role="status">
+                Still connecting. On weak signal this can take up to 10 seconds.
+                Keep this screen open.
+              </p>
+            ) : null}
+          </>
         )}
       </main>
     );
@@ -1177,14 +1284,17 @@ export default function PlayPotApp() {
     ? timerState(nextDueFamily, now)
     : null;
   const busy = Boolean(pending);
+  // Newest at the top, family due next at the bottom, right above ENTER.
+  const familiesByDue = [...activeFamilies].sort(
+    (left, right) =>
+      Date.parse(familyDueAt(right)) - Date.parse(familyDueAt(left)) ||
+      right.familyNumber - left.familyNumber,
+  );
 
   return (
     <main className="app-shell">
       <header className="status-header">
-        <div className="brand-row">
-          <h1>PLAY POT</h1>
-        </div>
-
+        <h1 className="sr-only">Play Pot</h1>
         <div className="capacity-row">
           <div
             className={`capacity-number ${
@@ -1196,32 +1306,17 @@ export default function PlayPotApp() {
           </div>
           <div className="spaces-card">
             <strong>
-              {paxInside <= CAPACITY ? slotsLeftToFifteen : FLEX_CAPACITY}
+              {paxInside <= CAPACITY
+                ? slotsLeftToFifteen
+                : Math.max(0, FLEX_CAPACITY - paxInside)}
             </strong>
             <span>
               {paxInside <= CAPACITY
                 ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT`
-                : "MAX PAX"}
+                : "MAX PAX LEFT"}
             </span>
           </div>
         </div>
-
-        {nextDueFamily && nextDueTimer ? (
-          <div
-            className={`next-due ${
-              nextDueTimer.overdue ? "next-due-overdue" : ""
-            }`}
-            role="status"
-            aria-live="polite"
-          >
-            <span>NEXT DUE</span>
-            <strong>
-              {familyLabel(nextDueFamily)}
-              {nextDueFamily.visual ? ` · ${nextDueFamily.visual}` : ""}
-            </strong>
-            <em>{nextDueTimer.label}</em>
-          </div>
-        ) : null}
 
         {unsaved ? (
           <div className="storage-alert" role="alert">
@@ -1231,82 +1326,7 @@ export default function PlayPotApp() {
       </header>
 
       <div className="content-stack">
-        <section className="admission-section" aria-labelledby="admission-title">
-          <div className="admission-composer">
-            <div className="section-heading">
-              <h2 id="admission-title">New family</h2>
-            </div>
-
-            <div className="front-counts">
-              <Stepper
-                label="Adults"
-                value={customAdults}
-                max={FLEX_CAPACITY - customChildren}
-                onChange={setCustomAdults}
-              />
-              <Stepper
-                label="Children"
-                value={customChildren}
-                max={FLEX_CAPACITY - customAdults}
-                onChange={setCustomChildren}
-              />
-            </div>
-
-            <div className="quick-details">
-              <label className="field-label" htmlFor="visual-input">
-                Visual
-              </label>
-              <input
-                id="visual-input"
-                className="text-input visual-input"
-                value={visual}
-                maxLength={60}
-                onChange={(event) => setVisual(event.target.value)}
-                placeholder={VISUAL_PLACEHOLDER}
-                autoComplete="off"
-              />
-            </div>
-
-            <button
-              type="button"
-              className={`commit-family-button ${
-                !fits ? "commit-overflow" : ""
-              } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
-              disabled={busy || entryLocked || (!fits && !canFlex)}
-              aria-busy={entryLocked}
-              onClick={(event) => {
-                if (canFlex) {
-                  confirmationReturnFocusRef.current = event.currentTarget;
-                  confirmationHandledRef.current = false;
-                  setConfirmFlex(true);
-                } else handleAdd();
-              }}
-            >
-              {entryLocked
-                ? entryRecorded
-                  ? "RECORDED ✓"
-                  : "PLEASE WAIT..."
-                : fits || canFlex
-                  ? `ENTER: ${selectedPax} PAX`
-                  : paxInside >= FLEX_CAPACITY
-                    ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
-                    : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
-            </button>
-          </div>
-        </section>
-
         <section className="operating-section" aria-labelledby="inside-title">
-          <div className="section-heading">
-            <h2 id="inside-title">Inside now</h2>
-            <span className="section-count">
-              {activeFamilies.length === 0
-                ? "EMPTY"
-                : `${activeFamilies.length} ${
-                    activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
-                  }`}
-            </span>
-          </div>
-
           {recentlyOut.length ? (
             <section
               className="recent-out-section"
@@ -1386,14 +1406,26 @@ export default function PlayPotApp() {
             </section>
           ) : null}
 
+          <div className="section-heading">
+            <h2 id="inside-title">Inside now</h2>
+            <span className="section-count">
+              {activeFamilies.length === 0
+                ? "EMPTY"
+                : `${activeFamilies.length} ${
+                    activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
+                  }`}
+            </span>
+          </div>
+
           <div className="family-list">
-            {activeFamilies.length ? (
-              activeFamilies.map((family) => (
+            {familiesByDue.length ? (
+              familiesByDue.map((family) => (
                 <ActiveFamilyCard
                   key={family.id}
                   family={family}
                   now={now}
                   disabled={busy}
+                  isNextDue={family.id === nextDueFamily?.id}
                   onOut={(trigger) => {
                     confirmationReturnFocusRef.current = trigger;
                     confirmationHandledRef.current = false;
@@ -1426,6 +1458,93 @@ export default function PlayPotApp() {
           </div>
         </section>
       </div>
+
+      <section className="entry-dock" aria-labelledby="admission-title">
+        <h2 id="admission-title" className="sr-only">
+          New family
+        </h2>
+        {/* Toasts cover this lane, never a button. */}
+        <div className="dock-lane">
+          {nextDueFamily && nextDueTimer ? (
+            <div
+              className={`next-due ${
+                nextDueTimer.overdue ? "next-due-overdue" : ""
+              }`}
+              role="status"
+              aria-live="polite"
+            >
+              <span>NEXT DUE</span>
+              <strong>
+                {familyLabel(nextDueFamily)}
+                {nextDueFamily.visual ? ` · ${nextDueFamily.visual}` : ""}
+              </strong>
+              <em>{nextDueTimer.label}</em>
+            </div>
+          ) : (
+            <p className="dock-lane-idle">
+              {activeFamilies.length
+                ? "Only families from an earlier day are inside."
+                : "No timers running."}
+            </p>
+          )}
+        </div>
+
+        <div className="front-counts">
+          <CountStepper
+            label="Adults"
+            units={["ADULT", "ADULTS"]}
+            value={customAdults}
+            max={FLEX_CAPACITY - customChildren}
+            onChange={setCustomAdults}
+          />
+          <CountStepper
+            label="Children"
+            units={["CHILD", "CHILDREN"]}
+            value={customChildren}
+            max={FLEX_CAPACITY - customAdults}
+            onChange={setCustomChildren}
+          />
+        </div>
+
+        <label className="sr-only" htmlFor="visual-input">
+          Visual identifier, clothing or items only (optional)
+        </label>
+        <input
+          id="visual-input"
+          className="text-input visual-input"
+          value={visual}
+          maxLength={60}
+          onChange={(event) => setVisual(event.target.value)}
+          placeholder={VISUAL_PLACEHOLDER}
+          autoComplete="off"
+        />
+
+        <button
+          type="button"
+          className={`commit-family-button ${
+            !fits ? "commit-overflow" : ""
+          } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
+          disabled={busy || entryLocked || (!fits && !canFlex)}
+          aria-busy={entryLocked}
+          onClick={(event) => {
+            if (canFlex) {
+              confirmationReturnFocusRef.current = event.currentTarget;
+              confirmationHandledRef.current = false;
+              setConfirmFlex(true);
+            } else handleAdd();
+          }}
+        >
+          {entryLocked
+            ? entryRecorded
+              ? "RECORDED ✓"
+              : "PLEASE WAIT..."
+            : fits || canFlex
+              ? `ENTER: ${selectedPax} PAX`
+              : paxInside >= FLEX_CAPACITY
+                ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
+                : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
+        </button>
+      </section>
 
       {outCandidate ? (
         <div className="confirm-overlay">
@@ -1514,7 +1633,9 @@ export default function PlayPotApp() {
           <section
             ref={confirmationDialogRef}
             className={`confirm-dialog ${
-              restoreProjectedPax > CAPACITY ? "confirm-dialog-overflow" : ""
+              restoreProjectedPax > CAPACITY
+                ? "confirm-dialog-overflow"
+                : "confirm-dialog-safe"
             }`}
             role="alertdialog"
             aria-modal="true"
