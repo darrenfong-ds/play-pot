@@ -1213,7 +1213,7 @@ export default function PlayPotApp() {
             </button>
           </form>
           <small>
-            This phone keeps its own count; the owner sees a view-only copy. No
+            Each phone controls its own tracker. Read-only live view active. No
             names or contact details.
           </small>
         </section>

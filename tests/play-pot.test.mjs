@@ -86,7 +86,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.doesNotMatch(client, /THIS PHONE \/ LIVE(?: VIEW)?/);
   assert.match(client, /createLiveSyncPayload/);
   assert.match(client, /fetch\("\/api\/live"/);
-  assert.match(client, /the owner sees a view-only copy/);
+  assert.match(client, /Read-only live view active/);
   assert.match(client, /No\s*names or contact details/);
   assert.doesNotMatch(client, /visible to the tool owner/);
   assert.match(client, /PIN\s*<strong>000000<\/strong>/);
