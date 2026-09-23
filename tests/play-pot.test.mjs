@@ -48,7 +48,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
     guestRoute,
     guestAuth,
     guestSessionCore,
-    hosting,
+    viteConfig,
     packageJson,
     manifestText,
     serviceWorker,
@@ -68,7 +68,7 @@ test("keeps phone control local and exposes only a read-only live mirror", async
     readFile(new URL("../app/api/guest/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/guest-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/guest-session-core.ts", import.meta.url), "utf8"),
-    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
@@ -230,10 +230,9 @@ test("keeps phone control local and exposes only a read-only live mirror", async
   assert.match(guestRoute, /export async function DELETE/);
   assert.doesNotMatch(`${guestRoute}\n${guestAuth}\n${guestSessionCore}`, /000000/);
 
-  const hostingConfig = JSON.parse(hosting);
-  assert.equal(hostingConfig.d1, "DB");
-  assert.equal(hostingConfig.r2, null);
-  assert.match(hostingConfig.project_id, /^appgprj_/);
+  assert.match(viteConfig, /binding: "DB"/);
+  assert.match(viteConfig, /database_name: "play-pot-live-view"/);
+  assert.doesNotMatch(viteConfig, /import .*sites-vite-plugin/);
   assert.match(worker, /\bDB: unknown/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
 

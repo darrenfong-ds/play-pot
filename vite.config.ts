@@ -1,36 +1,29 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
-import hostingConfig from "./.openai/hosting.json";
-import { sites } from "./build/sites-vite-plugin";
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
-const { d1, r2 } = hostingConfig;
+// Your own Cloudflare D1 database. Paste the database_id printed by
+//   pnpm exec wrangler d1 create play-pot-live-view --location apac
+// A D1 ID is not a secret, so it is safe to commit.
+const D1_DATABASE_ID = "c37701f7-894c-4f37-9567-2b9833415a27";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
-const localBindingConfig = {
+// Previously split between .openai/hosting.json and ChatGPT Sites packaging.
+// Values match the config Sites generated (dist/server/wrangler.json).
+const workerConfig = {
+  name: "play-pot-operations",
   main: "./worker/index.ts",
+  compatibility_date: "2026-05-15",
   compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: "play-pot-live-view",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
-        },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
-        },
-      ]
-    : [],
+  d1_databases: [
+    {
+      binding: "DB",
+      database_name: "play-pot-live-view",
+      database_id: D1_DATABASE_ID,
+    },
+  ],
+  observability: { enabled: true },
 };
 
 export default defineConfig(async () => {
@@ -49,10 +42,9 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
-      sites(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
+        config: workerConfig,
       }),
     ],
   };
