@@ -2,15 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AdminLiveDevice, LiveFamilyRecord } from "../live-view-core";
+import { formatClock } from "../time-format";
 
 type AdminAuthState = "checking" | "locked" | "ready";
-
-function formatClock(value: string) {
-  return new Intl.DateTimeFormat("en-SG", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 function timeSince(value: string, now: number) {
   const seconds = Math.max(0, Math.floor((now - Date.parse(value)) / 1_000));

@@ -466,6 +466,25 @@ input::placeholder {
   background: var(--amber-soft);
 }
 
+.stale-entry-flag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.63rem;
+  border-left: 4px solid var(--coral);
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--coral-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.025em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .family-times {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

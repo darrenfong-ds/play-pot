@@ -38,6 +38,7 @@ import {
   LIVE_DEVICE_STORAGE_KEY,
   LIVE_HEARTBEAT_MILLISECONDS,
 } from "./live-view-core";
+import { formatClock, formatShortDate, isFromEarlierDay } from "./time-format";
 
 type UndoAction = {
   id: string;
@@ -60,19 +61,9 @@ type EditCandidate = {
   timeLimitMinutes: number;
 };
 
-const sgTime = new Intl.DateTimeFormat("en-SG", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-  timeZone: "Asia/Singapore",
-});
-
 const ENTRY_LOCK_MILLISECONDS = 700;
 const ACTION_NOTICE_MILLISECONDS = 1_000;
-
-function formatClock(value: string | null) {
-  return value ? sgTime.format(new Date(value)) : "-";
-}
+const VISUAL_PLACEHOLDER = "Clothing or items only, e.g. red stroller";
 
 function familyLabel(family: Family) {
   return `#${family.familyNumber}`;
@@ -205,7 +196,7 @@ function FamilyEditor({
           value={visual}
           maxLength={60}
           onChange={(event) => setVisual(event.target.value)}
-          placeholder="e.g. blue stroller"
+          placeholder={VISUAL_PLACEHOLDER}
         />
         <div
           className="time-limit-editor"
@@ -280,9 +271,16 @@ function ActiveFamilyCard({
   ) => void;
 }) {
   const timer = timerState(family, now);
+  const fromEarlierDay = isFromEarlierDay(family.enteredAt, now);
 
   return (
     <article className={`family-card ${timer.overdue ? "family-card-due" : ""}`}>
+      {fromEarlierDay ? (
+        <p className="stale-entry-flag" role="note">
+          <strong>FROM EARLIER DAY</strong>
+          <span>IN {formatShortDate(family.enteredAt)}</span>
+        </p>
+      ) : null}
       <div className="family-main">
         <div className="family-id-block">
           <span className="family-id">
@@ -1172,7 +1170,7 @@ export default function PlayPotApp() {
                 value={visual}
                 maxLength={60}
                 onChange={(event) => setVisual(event.target.value)}
-                placeholder="e.g. yellow tee kid"
+                placeholder={VISUAL_PLACEHOLDER}
                 autoComplete="off"
               />
             </div>
