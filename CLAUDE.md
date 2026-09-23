@@ -7,6 +7,7 @@ Staff capacity and family-timer tracker for the Play Pot area at Children's Muse
 - **Never upgrade dependencies.** Install with `pnpm install --frozen-lockfile` only. Don't run `pnpm update`, `pnpm add`, or anything else that changes `package.json` versions or `pnpm-lock.yaml`. If pnpm is missing, enable it with `corepack enable` (the version is pinned by `packageManager` in `package.json`).
 - **Run `pnpm test` before any deploy. Every test must pass.** Never weaken, skip, or delete a test to make it pass. If a test genuinely needs to change, show the owner the diff and explain why *before* making the change.
 - **Never touch secrets or `.env.local`.** Don't read, edit, print, or commit them. Production secrets are managed in the Cloudflare dashboard, not from this repo.
+- **After every commit, push to `origin`** (the private GitHub backup, `darrenfong-ds/play-pot`). Push the current branch with a plain `git push`; never force-push.
 - **Never deploy without asking first.** This includes `wrangler deploy`, `wrangler d1 ... --remote`, `wrangler secret`, and any other command that changes the live Cloudflare account.
 - **The operating rules are deliberate. Don't change them unless the owner asks:**
   - Normal capacity is 15 pax (`CAPACITY`). Entry above 15 needs a second confirmation.
