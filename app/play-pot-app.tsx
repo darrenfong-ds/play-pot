@@ -141,8 +141,14 @@ function FamilyEditor({
   family,
   onSave,
   disabled,
+  summary,
+  defaultOpen = false,
+  onClose,
 }: {
   family: Family;
+  summary?: React.ReactNode;
+  defaultOpen?: boolean;
+  onClose?: () => void;
   onSave: (
     adults: number,
     children: number,
@@ -152,7 +158,7 @@ function FamilyEditor({
   ) => void;
   disabled: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [adults, setAdults] = useState(family.adults);
   const [children, setChildren] = useState(family.children);
   const [visual, setVisual] = useState(family.visual);
@@ -169,6 +175,7 @@ function FamilyEditor({
     setVisual(family.visual);
     setTimeLimitMinutes(family.timeLimitMinutes);
     setOpen(false);
+    onClose?.();
   }
 
   return (
@@ -177,7 +184,7 @@ function FamilyEditor({
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary aria-label={`Edit ${familyLabel(family)}`}>Edit</summary>
+      <summary aria-label={`Edit ${familyLabel(family)}`}>{summary ?? "Edit"}</summary>
       <div className="editor-body">
         <div className="editor-steppers">
           <Stepper
@@ -333,6 +340,150 @@ function ActiveFamilyCard({
   );
 }
 
+
+// ---- Layout prototype helpers (throwaway branch) ----
+function shortTimer(family: Family, now: number) {
+  const timer = timerState(family, now);
+  if (timer.label.includes("REACHED")) return { big: "DUE", small: "NOW", overdue: true };
+  const [big, ...rest] = timer.label.split(" ");
+  return { big, small: rest.join(" "), overdue: timer.overdue };
+}
+
+function rowSummary(family: Family, now: number) {
+  const timer = shortTimer(family, now);
+  const stale = isFromEarlierDay(family.enteredAt, now);
+  return (
+    <span className="cr-summary">
+      <span className="cr-info">
+        <strong>
+          #{family.familyNumber} · {family.visual || <em className="cr-novisual">No visual</em>}
+        </strong>
+        <small>
+          {familyPax(family)} PAX · {family.adults}A {family.children}C · IN {formatClock(family.enteredAt)}
+          {stale ? " · EARLIER DAY" : ""}
+        </small>
+      </span>
+      <span className="cr-timer">
+        <b>{timer.big}</b>
+        <small>{timer.small}</small>
+      </span>
+    </span>
+  );
+}
+
+type EditHandler = (
+  adults: number,
+  children: number,
+  visual: string,
+  timeLimitMinutes: number,
+  trigger: HTMLButtonElement,
+) => void;
+
+function CompactFamilyRow({
+  family,
+  now,
+  disabled,
+  onEdit,
+  action,
+}: {
+  family: Family;
+  now: number;
+  disabled: boolean;
+  onEdit: EditHandler;
+  action: React.ReactNode;
+}) {
+  const timer = timerState(family, now);
+  return (
+    <article className={`cr ${timer.overdue ? "cr-due" : ""}`}>
+      <FamilyEditor
+        key={`${family.id}-${family.adults}-${family.children}-${family.visual}-${family.timeLimitMinutes}`}
+        family={family}
+        disabled={disabled}
+        onSave={onEdit}
+        summary={rowSummary(family, now)}
+      />
+      {action}
+    </article>
+  );
+}
+
+function DockStepper({
+  label,
+  units,
+  value,
+  onChange,
+  min = 1,
+  max = FLEX_CAPACITY,
+}: {
+  label: string;
+  units: [string, string];
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <div className="dock-stepper" role="group" aria-label={`${label}: ${value}`}>
+      <button
+        type="button"
+        aria-label={`Remove one ${label.toLowerCase()}`}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+      >
+        −
+      </button>
+      <span className="dock-stepper-value">
+        <strong>{value}</strong>
+        <small>{value === 1 ? units[0] : units[1]}</small>
+      </span>
+      <button
+        type="button"
+        aria-label={`Add one ${label.toLowerCase()}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+function EditSheet({
+  family,
+  disabled,
+  onSave,
+  onClose,
+}: {
+  family: Family;
+  disabled: boolean;
+  onSave: EditHandler;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="confirm-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="confirm-dialog edit-sheet" role="dialog" aria-modal="true" aria-label={`Edit ${familyLabel(family)}`}>
+        <h2>Edit {familyLabel(family)}</h2>
+        <FamilyEditor
+          family={family}
+          disabled={disabled}
+          defaultOpen
+          onClose={onClose}
+          onSave={(adults, children, visual, timeLimitMinutes, trigger) => {
+            onSave(adults, children, visual, timeLimitMinutes, trigger);
+            onClose();
+          }}
+        />
+      </section>
+    </div>
+  );
+}
+// ---- end prototype helpers ----
+
 export default function PlayPotApp() {
   const [state, setState] = useState<PlayPotState | null>(null);
   const stateRef = useRef<PlayPotState | null>(null);
@@ -355,6 +506,10 @@ export default function PlayPotApp() {
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [confirmStartFresh, setConfirmStartFresh] = useState(false);
   const [editCandidate, setEditCandidate] = useState<EditCandidate | null>(null);
+  const [mode, setMode] = useState<"in" | "out">("in");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editSheetId, setEditSheetId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const [entryLocked, setEntryLocked] = useState(false);
   const [entryRecorded, setEntryRecorded] = useState(false);
   const entryLockRef = useRef(false);
@@ -655,6 +810,12 @@ export default function PlayPotApp() {
     );
     return () => window.clearTimeout(timeout);
   }, [notice]);
+
+  // Prototypes A and B keep the bottom-anchored list scrolled to the thumb.
+  useEffect(() => {
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [state?.revision, authState, mode]);
 
   // A layout effect stamps the open time before any later tap is handled.
   useLayoutEffect(() => {
@@ -1178,96 +1339,47 @@ export default function PlayPotApp() {
     : null;
   const busy = Boolean(pending);
 
-  return (
-    <main className="app-shell">
-      <header className="status-header">
-        <div className="brand-row">
-          <h1>PLAY POT</h1>
+
+  const openOut = (family: Family, trigger: HTMLButtonElement) => {
+    confirmationReturnFocusRef.current = trigger;
+    confirmationHandledRef.current = false;
+    setOutCandidate(family);
+  };
+  const editFor =
+    (family: Family): EditHandler =>
+    (adults, children, nextVisual, timeLimitMinutes, trigger) =>
+      requestEdit(family, adults, children, nextVisual, timeLimitMinutes, trigger);
+  const byDue = [...activeFamilies].sort(
+    (left, right) =>
+      Date.parse(familyDueAt(left)) - Date.parse(familyDueAt(right)) ||
+      left.familyNumber - right.familyNumber,
+  );
+  const overdueCount = activeFamilies.filter((family) => timerState(family, now).overdue).length;
+  const headroom =
+    paxInside < CAPACITY
+      ? { value: slotsLeftToFifteen, label: "SPACES LEFT" }
+      : paxInside < FLEX_CAPACITY
+        ? { value: FLEX_CAPACITY - paxInside, label: `OVER ${CAPACITY} · LEFT TO ${FLEX_CAPACITY}` }
+        : { value: 0, label: `FULL · MAX ${FLEX_CAPACITY}` };
+  const compactHeader = (
+    <header className="ph">
+      <div className={`ph-count ${paxInside >= CAPACITY ? "is-full" : ""}`}>
+        <strong>{paxInside}</strong>
+        <span>/ {CAPACITY} INSIDE</span>
+      </div>
+      <div className="ph-left">
+        <strong>{headroom.value}</strong>
+        <span>{headroom.label}</span>
+      </div>
+      {unsaved ? (
+        <div className="storage-alert" role="alert">
+          PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
         </div>
-
-        <div className="capacity-row">
-          <div
-            className={`capacity-number ${
-              paxInside >= CAPACITY ? "capacity-full" : "capacity-safe"
-            }`}
-          >
-            <strong>{paxInside}</strong>
-            <span>/ {CAPACITY} PAX</span>
-          </div>
-          <div className="spaces-card">
-            <strong>
-              {paxInside <= CAPACITY ? slotsLeftToFifteen : FLEX_CAPACITY}
-            </strong>
-            <span>
-              {paxInside <= CAPACITY
-                ? `${slotsLeftToFifteen === 1 ? "SLOT" : "SLOTS"} LEFT`
-                : "MAX PAX"}
-            </span>
-          </div>
-        </div>
-
-        {nextDueFamily && nextDueTimer ? (
-          <div
-            className={`next-due ${
-              nextDueTimer.overdue ? "next-due-overdue" : ""
-            }`}
-            role="status"
-            aria-live="polite"
-          >
-            <span>NEXT DUE</span>
-            <strong>
-              {familyLabel(nextDueFamily)}
-              {nextDueFamily.visual ? ` · ${nextDueFamily.visual}` : ""}
-            </strong>
-            <em>{nextDueTimer.label}</em>
-          </div>
-        ) : null}
-
-        {unsaved ? (
-          <div className="storage-alert" role="alert">
-            PHONE STORAGE ERROR / LAST ACTION NOT RECORDED
-          </div>
-        ) : null}
-      </header>
-
-      <div className="content-stack">
-        <section className="admission-section" aria-labelledby="admission-title">
-          <div className="admission-composer">
-            <div className="section-heading">
-              <h2 id="admission-title">New family</h2>
-            </div>
-
-            <div className="front-counts">
-              <Stepper
-                label="Adults"
-                value={customAdults}
-                max={FLEX_CAPACITY - customChildren}
-                onChange={setCustomAdults}
-              />
-              <Stepper
-                label="Children"
-                value={customChildren}
-                max={FLEX_CAPACITY - customAdults}
-                onChange={setCustomChildren}
-              />
-            </div>
-
-            <div className="quick-details">
-              <label className="field-label" htmlFor="visual-input">
-                Visual
-              </label>
-              <input
-                id="visual-input"
-                className="text-input visual-input"
-                value={visual}
-                maxLength={60}
-                onChange={(event) => setVisual(event.target.value)}
-                placeholder={VISUAL_PLACEHOLDER}
-                autoComplete="off"
-              />
-            </div>
-
-            <button
+      ) : null}
+    </header>
+  );
+  const enterButton = (
+    <button
               type="button"
               className={`commit-family-button ${
                 !fits ? "commit-overflow" : ""
@@ -1292,22 +1404,40 @@ export default function PlayPotApp() {
                     ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
                     : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
             </button>
-          </div>
-        </section>
-
-        <section className="operating-section" aria-labelledby="inside-title">
-          <div className="section-heading">
-            <h2 id="inside-title">Inside now</h2>
-            <span className="section-count">
-              {activeFamilies.length === 0
-                ? "EMPTY"
-                : `${activeFamilies.length} ${
-                    activeFamilies.length === 1 ? "FAMILY" : "FAMILIES"
-                  }`}
-            </span>
-          </div>
-
-          {recentlyOut.length ? (
+  );
+  const visualInput = (
+    <input
+      id="visual-input"
+      className="text-input visual-input"
+      value={visual}
+      maxLength={60}
+      onChange={(event) => setVisual(event.target.value)}
+      placeholder="Visual (optional), e.g. red stroller"
+      aria-label="Visual identifier, clothing or items only"
+      autoComplete="off"
+    />
+  );
+  const dockSteppers = (
+    <div className="pdock-steppers">
+      <DockStepper
+        label="Adults"
+        units={["ADULT", "ADULTS"]}
+        value={customAdults}
+        max={FLEX_CAPACITY - customChildren}
+        onChange={setCustomAdults}
+      />
+      <DockStepper
+        label="Children"
+        units={["CHILD", "CHILDREN"]}
+        value={customChildren}
+        max={FLEX_CAPACITY - customAdults}
+        onChange={setCustomChildren}
+      />
+    </div>
+  );
+  const recentBlock = (
+    <>
+      {recentlyOut.length ? (
             <section
               className="recent-out-section"
               aria-label="Recently OUT families"
@@ -1385,47 +1515,90 @@ export default function PlayPotApp() {
               </details>
             </section>
           ) : null}
+    </>
+  );
+  const emptyState = (
+    <div className="empty-state">
+      <strong>AREA CLEAR</strong>
+      <span>Ready for the next family.</span>
+    </div>
+  );
+  const editSheetFamily = editSheetId
+    ? activeFamilies.find((family) => family.id === editSheetId) ?? null
+    : null;
+  const editSheet = editSheetFamily ? (
+    <EditSheet
+      key={editSheetFamily.id}
+      family={editSheetFamily}
+      disabled={busy}
+      onSave={editFor(editSheetFamily)}
+      onClose={() => setEditSheetId(null)}
+    />
+  ) : null;
 
-          <div className="family-list">
-            {activeFamilies.length ? (
-              activeFamilies.map((family) => (
-                <ActiveFamilyCard
+  const selectedFamily =
+    activeFamilies.find((family) => family.id === selectedId) ?? nextDueFamily ?? byDue[0] ?? null;
+  return (
+    <main className="app-shell proto proto-c">
+      {compactHeader}
+      <div className="pmain">
+        {recentBlock}
+        {byDue.length ? (
+          <div className="pc-list" role="radiogroup" aria-label="Choose the family to check out">
+            {byDue.map((family) => {
+              const selected = selectedFamily?.id === family.id;
+              const timer = timerState(family, now);
+              return (
+                <article
                   key={family.id}
-                  family={family}
-                  now={now}
-                  disabled={busy}
-                  onOut={(trigger) => {
-                    confirmationReturnFocusRef.current = trigger;
-                    confirmationHandledRef.current = false;
-                    setOutCandidate(family);
-                  }}
-                  onEdit={(
-                    adults,
-                    children,
-                    nextVisual,
-                    timeLimitMinutes,
-                    trigger,
-                  ) =>
-                    requestEdit(
-                      family,
-                      adults,
-                      children,
-                      nextVisual,
-                      timeLimitMinutes,
-                      trigger,
-                    )
-                  }
-                />
-              ))
-            ) : (
-              <div className="empty-state">
-                <strong>AREA CLEAR</strong>
-                <span>Ready for the next family.</span>
-              </div>
-            )}
+                  className={`cr cr-select ${timer.overdue ? "cr-due" : ""} ${selected ? "is-selected" : ""}`}
+                  role="radio"
+                  aria-checked={selected}
+                  tabIndex={0}
+                  onClick={() => setSelectedId(family.id)}
+                >
+                  {rowSummary(family, now)}
+                  {selected ? (
+                    <button
+                      type="button"
+                      className="pc-edit"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setEditSheetId(family.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
-        </section>
+        ) : (
+          emptyState
+        )}
       </div>
+      <section className="pdock" aria-label="New family and check out">
+        {dockSteppers}
+        {visualInput}
+        <div className="pc-actions">
+          {enterButton}
+          <button
+            type="button"
+            className="pc-out"
+            disabled={busy || !selectedFamily}
+            onClick={(event) => selectedFamily && openOut(selectedFamily, event.currentTarget)}
+          >
+            <strong>{selectedFamily ? `OUT ${familyLabel(selectedFamily)}` : "OUT"}</strong>
+            <small>
+              {selectedFamily
+                ? selectedFamily.visual || `${familyPax(selectedFamily)} PAX`
+                : "Nobody inside"}
+            </small>
+          </button>
+        </div>
+      </section>
+      {editSheet}
 
       {outCandidate ? (
         <div className="confirm-overlay">
