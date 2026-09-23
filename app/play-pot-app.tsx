@@ -355,18 +355,17 @@ function ActiveFamilyCard({
               {familyBreakdown(family)}
             </span>
           </span>
+          <div className="family-times">
+            <span>IN {formatClock(family.enteredAt)}</span>
+            <span className="family-due-time">
+              DUE {formatClock(familyDueAt(family))}
+            </span>
+          </div>
         </div>
         <div className={`timer-pill ${timer.overdue ? "timer-due" : ""}`}>
           <strong>{timerLead}</strong>
           <span>{timerRest.join(" ")}</span>
         </div>
-      </div>
-
-      <div className="family-times">
-        <span>IN {formatClock(family.enteredAt)}</span>
-        <span className="family-due-time">
-          DUE {formatClock(familyDueAt(family))}
-        </span>
       </div>
 
       <div className="family-actions">
@@ -1506,44 +1505,47 @@ export default function PlayPotApp() {
           />
         </div>
 
-        <label className="sr-only" htmlFor="visual-input">
-          Visual identifier, clothing or items only (optional)
-        </label>
-        <input
-          id="visual-input"
-          className="text-input visual-input"
-          value={visual}
-          maxLength={60}
-          onChange={(event) => setVisual(event.target.value)}
-          placeholder={VISUAL_PLACEHOLDER}
-          autoComplete="off"
-        />
-
-        <button
-          type="button"
-          className={`commit-family-button ${
-            !fits ? "commit-overflow" : ""
-          } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
-          disabled={busy || entryLocked || (!fits && !canFlex)}
-          aria-busy={entryLocked}
-          onClick={(event) => {
-            if (canFlex) {
-              confirmationReturnFocusRef.current = event.currentTarget;
-              confirmationHandledRef.current = false;
-              setConfirmFlex(true);
-            } else handleAdd();
-          }}
-        >
-          {entryLocked
-            ? entryRecorded
-              ? "RECORDED ✓"
-              : "PLEASE WAIT..."
-            : fits || canFlex
-              ? `ENTER: ${selectedPax} PAX`
-              : paxInside >= FLEX_CAPACITY
-                ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
-                : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
-        </button>
+        {/* The clothing field and ENTER share one row to keep the dock short. */}
+        <div className="dock-entry-row">
+          <label className="sr-only" htmlFor="visual-input">
+            Visual identifier, clothing or items only (optional)
+          </label>
+          <input
+            id="visual-input"
+            className="text-input visual-input"
+            value={visual}
+            maxLength={60}
+            onChange={(event) => setVisual(event.target.value)}
+            placeholder={VISUAL_PLACEHOLDER}
+            autoComplete="off"
+          />
+  
+          <button
+            type="button"
+            className={`commit-family-button ${
+              !fits ? "commit-overflow" : ""
+            } ${entryLocked && entryRecorded ? "commit-recorded" : ""}`}
+            disabled={busy || entryLocked || (!fits && !canFlex)}
+            aria-busy={entryLocked}
+            onClick={(event) => {
+              if (canFlex) {
+                confirmationReturnFocusRef.current = event.currentTarget;
+                confirmationHandledRef.current = false;
+                setConfirmFlex(true);
+              } else handleAdd();
+            }}
+          >
+            {entryLocked
+              ? entryRecorded
+                ? "RECORDED ✓"
+                : "PLEASE WAIT..."
+              : fits || canFlex
+                ? `ENTER: ${selectedPax} PAX`
+                : paxInside >= FLEX_CAPACITY
+                  ? `MAX ${FLEX_CAPACITY} / STOP ENTRY`
+                  : `CANNOT ENTER / MAX ${FLEX_CAPACITY}`}
+          </button>
+          </div>
       </section>
 
       {outCandidate ? (

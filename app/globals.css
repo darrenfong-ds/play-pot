@@ -149,12 +149,12 @@ input::placeholder {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.4rem 1rem 0.45rem;
+  padding: 0.3rem 1rem 0.35rem;
 }
 
 .capacity-number,
 .spaces-card {
-  min-height: 3.1rem;
+  min-height: 2.75rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -169,7 +169,7 @@ input::placeholder {
 }
 
 .capacity-number strong {
-  font-size: 2.9rem;
+  font-size: 2.5rem;
   font-weight: 900;
   line-height: 0.95;
   letter-spacing: -0.05em;
@@ -193,12 +193,12 @@ input::placeholder {
   min-width: 6.5rem;
   max-width: 9.5rem;
   align-items: center;
-  padding: 0.3rem 0.6rem;
+  padding: 0.2rem 0.6rem;
   background: var(--header-soft);
 }
 
 .spaces-card strong {
-  font-size: 1.6rem;
+  font-size: 1.35rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -231,17 +231,17 @@ input::placeholder {
 /*
  * The list sits on the entry dock like a chat: it fills from the bottom, so the
  * family due next is directly above ENTER. The bottom padding is the dock
- * (16.125rem) plus a small gap, and also clears the notice lane inside it.
+ * (9.85rem) plus a small gap, and also clears the notice lane inside it.
  */
 .content-stack {
   width: min(100%, 760px);
-  min-height: calc(100vh - 4.3rem - env(safe-area-inset-top));
-  min-height: calc(100dvh - 4.3rem - env(safe-area-inset-top));
+  min-height: calc(100vh - 3.7rem - env(safe-area-inset-top));
+  min-height: calc(100dvh - 3.7rem - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   margin-inline: auto;
-  padding: 0.8rem 0.75rem calc(17rem + env(safe-area-inset-bottom));
+  padding: 0.6rem 0.6rem calc(10.75rem + env(safe-area-inset-bottom));
 }
 
 .recent-out-section {
@@ -253,12 +253,12 @@ input::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .section-heading h2 {
   margin: 0.08rem 0 0;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   letter-spacing: -0.025em;
 }
 
@@ -276,23 +276,23 @@ input::placeholder {
 }
 
 .count-stepper {
-  height: 3.5rem;
+  height: 2.75rem;
   display: grid;
-  grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
   align-items: center;
-  padding: 0.18rem;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--surface-soft);
 }
 
 .count-stepper button {
-  height: 3rem;
-  border: 1px solid var(--line);
+  height: 100%;
+  border: 0;
   border-radius: 10px;
   background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 800;
 }
 
@@ -304,14 +304,14 @@ input::placeholder {
 }
 
 .count-stepper-value strong {
-  font-size: 1.45rem;
+  font-size: 1.2rem;
   font-weight: 900;
 }
 
 .count-stepper-value small {
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.03em;
 }
@@ -374,14 +374,16 @@ input::placeholder {
 
 .commit-family-button {
   width: 100%;
-  height: 3.75rem;
+  height: 3rem;
+  padding: 0 0.4rem;
   border: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--teal-fill);
   color: #fff;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 900;
-  letter-spacing: 0.04em;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
 }
 
 .commit-overflow {
@@ -399,8 +401,8 @@ input::placeholder {
 
 /*
  * Fixed entry dock. Its parts have fixed heights so the notice lane sits at a
- * known offset: 12.125rem from the bottom (gap + steppers + gap + visual + gap
- * + ENTER + bottom padding), with the lane itself 3.5rem tall.
+ * known offset: 6.95rem from the bottom (gap + steppers + gap + entry row +
+ * bottom padding), with the lane itself 2.5rem tall.
  */
 .entry-dock {
   position: fixed;
@@ -410,23 +412,32 @@ input::placeholder {
   z-index: 40;
   width: min(100%, 760px);
   display: grid;
-  gap: 0.5rem;
+  gap: 0.4rem;
   margin-inline: auto;
-  padding: 0.5rem 0.55rem calc(0.5rem + env(safe-area-inset-bottom));
+  padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  border-radius: 18px 18px 0 0;
+  border-radius: 16px 16px 0 0;
   background: var(--surface);
-  box-shadow: 0 -8px 22px var(--page-shadow);
+  box-shadow: 0 -6px 18px var(--page-shadow);
+}
+
+/* The clothing field and ENTER share a row; ENTER keeps the thumb side. */
+.dock-entry-row {
+  height: 3rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8.75rem, 44%);
+  gap: 0.4rem;
 }
 
 .entry-dock .visual-input {
-  height: 2.875rem;
+  height: 3rem;
   min-height: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 16px;
 }
 
 .dock-lane {
-  height: 3.5rem;
+  height: 2.5rem;
 }
 
 .dock-lane-idle {
@@ -436,9 +447,9 @@ input::placeholder {
   justify-content: center;
   margin: 0;
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
@@ -447,17 +458,17 @@ input::placeholder {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.4rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0 0.65rem;
   border: 1px solid var(--teal);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--green-soft);
   color: var(--ink);
 }
 
 .next-due > span:first-child {
   color: var(--teal);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.06em;
 }
@@ -466,13 +477,13 @@ input::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 800;
 }
 
 .next-due > em {
   text-align: right;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-style: normal;
   font-weight: 900;
   letter-spacing: 0.02em;
@@ -491,14 +502,14 @@ input::placeholder {
 
 .family-list {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.5rem;
 }
 
 .family-card {
   overflow: hidden;
-  padding: 0.75rem;
+  padding: 0.55rem 0.65rem 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--surface);
 }
 
@@ -523,9 +534,10 @@ input::placeholder {
 
 .family-id-block {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.1rem;
 }
 
 .family-id-line {
@@ -536,31 +548,33 @@ input::placeholder {
 }
 
 .family-id {
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 900;
 }
 
 .family-pax {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
 .timer-pill {
-  min-width: 5.4rem;
+  min-width: 4.9rem;
   display: flex;
   flex: none;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  padding: 0.4rem 0.55rem;
-  border-radius: 12px;
+  align-self: stretch;
+  padding: 0.3rem 0.45rem;
+  border-radius: 11px;
   background: var(--surface-soft);
   color: var(--ink);
   text-align: center;
 }
 
 .timer-pill strong {
-  font-size: 1.75rem;
+  font-size: 1.6rem;
   font-weight: 900;
   line-height: 1;
 }
@@ -601,8 +615,8 @@ input::placeholder {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: baseline;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 900;
@@ -628,7 +642,7 @@ input::placeholder {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 800;
   line-height: 1.2;
 }
@@ -642,10 +656,10 @@ input::placeholder {
 /* A small Edit on the left, a wide OUT on the right where the thumb lands. */
 .family-actions {
   display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
+  grid-template-columns: 4.75rem minmax(0, 1fr);
   align-items: start;
-  gap: 0.6rem;
-  margin-top: 0.65rem;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
 }
 
 .family-editor {
@@ -657,7 +671,7 @@ input::placeholder {
 }
 
 .family-editor summary {
-  min-height: 52px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -766,9 +780,9 @@ input::placeholder {
 }
 
 .out-button {
-  min-height: 52px;
+  min-height: 44px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--coral-fill);
   color: #fff;
   font-size: 1.1rem;
@@ -806,7 +820,7 @@ input::placeholder {
 }
 
 .recent-out-section summary {
-  min-height: 64px;
+  min-height: 52px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1093,26 +1107,26 @@ input::placeholder {
 /* Sits exactly over the dock's NEXT DUE lane, so it never covers a button. */
 .toast {
   position: fixed;
-  right: 0.55rem;
-  bottom: calc(12.125rem + env(safe-area-inset-bottom));
-  left: 0.55rem;
+  right: 0.5rem;
+  bottom: calc(6.95rem + env(safe-area-inset-bottom));
+  left: 0.5rem;
   z-index: 50;
-  width: min(calc(100% - 1.1rem), 740px);
-  min-height: 3.5rem;
+  width: min(calc(100% - 1rem), 744px);
+  min-height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.6rem;
   margin-inline: auto;
-  padding: 0.35rem 0.4rem 0.35rem 0.8rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   background: #17383f;
   color: #fff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 800;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .toast-error {
@@ -1121,7 +1135,7 @@ input::placeholder {
 
 .toast button {
   min-width: 52px;
-  min-height: 44px;
+  min-height: 2.2rem;
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 10px;
   background: transparent;
@@ -1667,15 +1681,15 @@ input::placeholder {
   }
 
   .capacity-number strong {
-    font-size: 2.55rem;
+    font-size: 2.3rem;
   }
 
   .family-actions {
-    grid-template-columns: 4.75rem minmax(0, 1fr);
+    grid-template-columns: 4.25rem minmax(0, 1fr);
   }
 
   .timer-pill {
-    min-width: 4.9rem;
+    min-width: 4.4rem;
   }
 
   .next-due {
@@ -1684,7 +1698,15 @@ input::placeholder {
   }
 
   .next-due > span:first-child {
-    font-size: 0.68rem;
+    font-size: 0.62rem;
+  }
+
+  .dock-entry-row {
+    grid-template-columns: minmax(0, 1fr) minmax(8.25rem, 46%);
+  }
+
+  .commit-family-button {
+    font-size: 0.92rem;
   }
 }
 
