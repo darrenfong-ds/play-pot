@@ -136,6 +136,24 @@ test("shows the blocked entry button at full opacity with readable contrast", as
   assert.ok(contrast >= 4.5, `white on ${coralFill} is ${contrast.toFixed(2)}:1`);
 });
 
+test("allows pinch zoom", async () => {
+  const layout = await readSource("app/layout.tsx");
+  assert.doesNotMatch(layout, /maximumScale|minimumScale|userScalable/);
+
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  const html = await response.text();
+  const viewport = html.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
+  assert.equal(viewport, "width=device-width, initial-scale=1");
+  assert.doesNotMatch(html, /maximum-scale|user-scalable=no/);
+});
+
 test("keeps the OUT UNDO notice up and clear of the last OUT button", async () => {
   const [client, css] = await Promise.all([
     readSource("app/play-pot-app.tsx"),
