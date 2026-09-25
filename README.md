@@ -13,19 +13,26 @@ A mobile web app I built to replace manual session tracking at the Play Pot area
 
 ## The problem
 
-Play Pot runs timed sessions for families, with a normal capacity of 15 people and a hard maximum of 20. Staff were tracking sessions manually. At any moment they had to know how many people were inside, when each family came in, and whose 15 minutes were up, all while running the floor.
+Play Pot runs timed sessions for families, with a normal capacity of 15 people and a hard maximum of 20. Staff tracked sessions with **pen and paper**. During a busy shift, one person had to write each family down, add up the headcount, work out due times, update totals and watch the crowd, all at once.
 
-## What the app does
+> With paper, the staff member manages the crowd **and** acts as the calculator and timer. With the tracker, the staff member manages the crowd while the app handles the calculations and timing.
 
-| Need on the floor | What the app does |
+## Pen and paper vs the tracker
+
+| With pen and paper | With the Play Pot tracker |
 |---|---|
-| Know the headcount instantly | Shows a live count against capacity (e.g. **12 / 15 people, 3 spaces left**). |
-| Don't go over capacity | Entry above 15 needs a second confirmation. New entry above 20 is always blocked. |
-| Know whose time is up | Gives every family a 15-minute timer and lists families by due time. The next family due sits right above the entry button, and overdue families turn amber. |
-| Work one-handed on a busy floor | Keeps the main actions (enter, next check-out) in thumb reach, with large buttons and plain wording. |
-| Recover from mistakes | Asks for confirmation before check-out, offers undo, and keeps a 15-minute "Checked out" recovery list to put a family back inside. |
-| Let the supervisor see all phones | Provides a password-protected, **view-only** live dashboard across staff phones. |
-| Protect visitors' privacy | Identifies families only by a short clothing description, never names, photos or ticket numbers. Checked-out records are deleted after 15 minutes, and the live view expires after 12 hours. |
+| Staff add up adults and children by hand, and miscounts are easy. | Every family is totalled automatically, and the live count (e.g. **12 / 15 people, 3 spaces left**) updates on every entry, check-out, edit and restore. |
+| Due times are worked out by hand, and staff keep checking the clock. | Entry is timestamped the moment it's recorded. The app calculates the 15-minute due time and shows minutes left or minutes over. |
+| It's hard to see who is due next. | **Next due** always points to the earliest family, and overdue families turn amber. |
+| Going over 15 people is easy to miss. | Entry above 15 needs a second confirmation. New entry above 20 is blocked. |
+| The wrong family gets crossed out, and corrections get messy. | Check-out asks for confirmation, offers undo, and keeps a 15-minute recovery list. Counts, descriptions and timers can be edited cleanly. |
+| Handwriting and abbreviations differ between staff. | Every family is recorded the same way, so the record reads the same for everyone and new staff learn one process. |
+| It needs a pen and a writing surface. | It works one-handed on a phone while standing or moving, with the main buttons in thumb reach. |
+| Paper can be lost, damaged, or read by anyone nearby. | The app is PIN-protected and saves to the phone with a backup copy. Families are described by clothing only, never names, photos or ticket numbers. |
+| Old visitor details linger on the sheet and need disposal. | Checked-out records are deleted automatically after 15 minutes. |
+| A supervisor has to walk over to check. | A password-protected, **view-only** live dashboard shows every staff phone's count and timers. |
+
+**Where paper still wins:** it doesn't need a charged phone or a connection. A blank sheet stays nearby as a fallback.
 
 ## How I developed it
 
