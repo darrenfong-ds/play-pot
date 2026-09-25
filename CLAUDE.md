@@ -1,6 +1,6 @@
 # Play Pot
 
-Staff capacity and family-timer tracker for the Play Pot area at Children's Museum Singapore. Hosted on the owner's own Cloudflare account: Worker `play-pot-operations`, D1 database `play-pot-live-view` (binding `DB`). Worker config lives in `vite.config.ts`; see `README.md` for the operating rules in staff terms.
+Staff capacity and family-timer tracker for the Play Pot area at Children's Museum Singapore. Hosted on the owner's own Cloudflare account: Worker `play-pot-operations`, D1 database `play-pot-live-view` (binding `DB`). Worker config lives in `vite.config.ts`; see `docs/staff-guide.md` for the operating rules in staff terms.
 
 ## Standing rules
 
