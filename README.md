@@ -32,7 +32,7 @@ Play Pot runs timed sessions for families, with a normal capacity of 15 people a
 | Old visitor details linger on the sheet and need disposal. | Checked-out records are deleted automatically after 15 minutes. |
 | A supervisor has to walk over to check. | A password-protected, **view-only** live dashboard shows every staff phone's count and timers. |
 
-**Where paper still wins:** it doesn't need a charged phone or a connection. A blank sheet stays nearby as a fallback.
+**Where paper still wins:** it doesn't need a charged phone or a connection, so keeping a blank sheet nearby as a fallback is still sensible.
 
 ## How I developed it
 
